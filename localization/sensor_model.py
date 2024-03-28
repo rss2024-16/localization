@@ -31,11 +31,11 @@ class SensorModel:
 
         ####################################
         # Adjust these parameters
-        self.alpha_hit = 0
-        self.alpha_short = 0
-        self.alpha_max = 0
-        self.alpha_rand = 0
-        self.sigma_hit = 0
+        self.alpha_hit = 0.74
+        self.alpha_short = 0.07
+        self.alpha_max = 0.07
+        self.alpha_rand = 0.12
+        self.sigma_hit = 8
 
         # Your sensor table will be a `table_width` x `table_width` np array:
         self.table_width = 201
@@ -86,8 +86,44 @@ class SensorModel:
         returns:
             No return type. Directly modify `self.sensor_model_table`.
         """
+        zmax = self.table_width
 
-        raise NotImplementedError
+        phits = np.empty((self.table_width, self.table_width))
+        pothers = np.empty((self.table_width, self.table_width))
+
+        #iterating left to right across columns
+        for d in range(self.table_width): #cols
+            for zk in range(self.table_width): #rows
+
+                phit = 1/zmax * ( 1/np.sqrt(2*np.pi*self.sigma_hit**2) * np.exp(-(zk-d)**2/(2*self.sigma_hit**2)))
+                
+                pshort = 2/d * (1-zk/d) if zk <= d and d!= 0 else 0
+                pmax = 1 if zk == (zmax-1) else 0
+                prand = 1/zmax
+
+                phits[zk][d] = phit
+                pothers[zk][d] = self.alpha_short*pshort + self.alpha_rand*prand + self.alpha_max*pmax
+
+        
+        for row in range(phits.shape[0]):
+            #normalize across increasing d values to sum phits to 1
+            phits[row,:] = phits[row,:] / sum(phits[row,:])
+
+        for d in range(self.table_width):
+            for zk in range(self.table_width):
+                ptotal = self.alpha_hit*phits[zk][d] + pothers[zk][d]
+                self.sensor_model_table[zk][d] = ptotal
+
+        for col in range(self.sensor_model_table.shape[1]):
+            #normalize columns to sum probabilities to 1
+            self.sensor_model_table[:,col] = self.sensor_model_table[:,col] / sum(self.sensor_model_table[:,col])
+
+        # self.sensor_model_table = self.sensor_model_table / np.linalg.norm(self.sensor_model_table)
+        np.save('precomputed_table',self.sensor_model_table)
+        np.save('phits',phits)
+        np.save('pothers',pothers)
+
+        
 
     def evaluate(self, particles, observation):
         """

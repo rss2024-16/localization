@@ -3,6 +3,7 @@ from localization.motion_model import MotionModel
 
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped
+from sensor_msgs.msg import LaserScan
 
 from rclpy.node import Node
 import rclpy
@@ -74,7 +75,16 @@ class ParticleFilter(Node):
         #
         # Publish a transformation frame between the map
         # and the particle_filter_frame.
+    
+    def laser_callback(self):
+        pass
 
+    def odom_callback(self):
+        pass
+
+    def pose_callback(self):
+        pass
+        
 
 def main(args=None):
     rclpy.init(args=args)

@@ -1,4 +1,7 @@
+import numpy as np
 
+import random
+import math
 
 class MotionModel:
 
@@ -11,6 +14,9 @@ class MotionModel:
         pass
 
         ####################################
+    
+    def sample_normal_distribution(val):
+        return val/6 * sum([random.random() for i in range(1,13)])
 
     def evaluate(self, particles, odometry):
         """
@@ -31,9 +37,56 @@ class MotionModel:
                 same size
         """
 
-        ####################################
-        # TODO
+        transform = lambda theta: np.array([ [np.cos(theta), -np.sin(theta), 0],
+                                             [np.sin(theta), np.cos(theta), 0],
+                                             [0, 0, 1]
+                                            ])
+        
+        rand_mod = lambda x: -1 + 2*random.random() #modifies random.random() to return in interval [-1,1]
+        
+        normal_sample = lambda val: val/6 * sum([rand_mod(None) for i in range(1,13)])
+        triangle_sample = lambda val: val * rand_mod(None)
 
-        raise NotImplementedError
+        dx,dy,dtheta = odometry[0],odometry[1],odometry[2]
 
-        ####################################
+        # a1 = .74
+        # a2 = .07
+        # a3 = .07
+        # a4 = .12
+        a1 = .3
+        a2 = .3
+        a3 = .3
+
+        particles_updated = []
+
+        for particle in particles:
+            # x,y,theta = particle[0],particle[1],particle[2]
+
+            future_particles = particle + transform(particle[-1]) * odometry
+            xprime = a1*normal_sample(future_particles[0])
+            yprime = a2*normal_sample(future_particles[1])
+            thetaprime = a3*normal_sample(future_particles[2])
+
+            xt = [xprime,yprime,thetaprime]
+            particles_updated.append(xt)
+
+            ###################### BOOK ALGORITHM ********************************
+            # drot1 = math.atan2(dy,dx) - theta #change in rotation on car hemisphere
+            # dtrans = ( dx**2 + dy**2 ) ** (1/2) #change in translation
+            # drot2 = dtheta - drot1 #change in rotation across from car
+
+            # drot1_hat = drot1 - normal_sample(a1*drot1 + a2*dtrans)
+            # dtrans_hat = dtrans - normal_sample(a3*dtrans + a4* (drot1 + drot2))
+            # drot2_hat = drot2 - normal_sample(a1*drot2 + a2*dtrans)
+
+            # xprime = x + dtrans_hat * np.cos(theta + drot1_hat)
+            # yprime = y + dtrans_hat * np.sin(theta + drot1_hat)
+            # thetaprime = theta + drot1_hat + drot2_hat
+
+            # xt = np.array([xprime,yprime,thetaprime])
+            # particles_updated.append(xt)
+            #**************************************************************************
+
+
+
+        return particles_updated
