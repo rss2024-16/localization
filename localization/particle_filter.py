@@ -6,6 +6,7 @@ from geometry_msgs.msg import PoseWithCovarianceStamped
 from sensor_msgs.msg import LaserScan
 
 import numpy as np
+import math
 
 from rclpy.node import Node
 import rclpy
@@ -31,7 +32,7 @@ class ParticleFilter(Node):
         self.declare_parameter('odom_topic', "/odom")
         self.declare_parameter('scan_topic', "/scan")
 
-        self.particles = [0 for i in range(100)]
+        self.particles = []
 
         scan_topic = self.get_parameter("scan_topic").get_parameter_value().string_value
         odom_topic = self.get_parameter("odom_topic").get_parameter_value().string_value
@@ -84,10 +85,7 @@ class ParticleFilter(Node):
         Whenever you get sensor data use the sensor model to compute the particle probabilities. 
         Then resample the particles based on these probabilities
         '''
-        if self.particles[0] != 0:
-            angle_min = scan.angle_min
-            angle_increment = scan.angle_increment
-
+        if len(self.particles) != 0:
             sample_size = 100
 
             #sample by closest ranges
@@ -95,13 +93,25 @@ class ParticleFilter(Node):
             #sample randomly
             observation = np.random.choice(scan.ranges,size=sample_size)
 
-            probabilities = self.sensor_model.evaluate(self.particles,observation)
+            weights = self.sensor_model.evaluate(self.particles,observation)
+            if weights is not None:
 
-            # PROB_THRESHOLD = 0.1
+                # self.get_logger().info(f'{probabilities}')
 
-            # resampled_particles = np.array([particle[x] for x in range(len(normalized_probs))\
-            #                                  if normalized_probs[x] > PROB_THRESHOLD])
+                PROB_THRESHOLD = 0.1
 
+                resampled_particles = np.random.choice(self.particles,p=weights)
+
+                # resampled_particles = np.array([self.particles[x] for x in range(len(normalized_probs))\
+                #                                 if normalized_probs[x] > PROB_THRESHOLD])
+                
+                average_x = np.mean([x[0] for x in resampled_particles])
+                average_y = np.mean([x[1] for x in resampled_particles])
+                average_theta = math.atan2(sum([np.sin(x[2]) for x in resampled_particles]),\
+                                           sum([np.cos(x[2]) for x in resampled_particles]))
+                
+
+                self.get_logger().info(f'Sampled x: {average_x}\nSampled y: {average_y}\nSample theta: {average_theta}')
 
 
 
@@ -122,9 +132,10 @@ class ParticleFilter(Node):
         x = pose_data.pose.pose.position.x
         y = pose_data.pose.pose.position.y
         theta = 2*np.arccos(pose_data.pose.pose.orientation.w)
+        self.get_logger().info(f'Real x: {x}\nReal y: {y}\nReal theta: {theta}')
         # self.get_logger().info(f'x: {x}\ny: {y}\n theta: {theta}\n')
         xs = x + np.random.default_rng().uniform(low=-1.0,high=1.0,size=200)
-        ys = x + np.random.default_rng().uniform(low=-1.0,high=1.0,size=200)
+        ys = y + np.random.default_rng().uniform(low=-1.0,high=1.0,size=200)
         #wraps the angles to 2*pi
         thetas = np.angle(np.exp(1j * (theta + np.random.default_rng().uniform(low=0.0,high=2*np.pi,size=200) ) ))
         self.particles = [(x,y,theta) for x,y,theta in zip(xs,ys,thetas)]
