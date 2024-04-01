@@ -48,16 +48,10 @@ class MotionModel:
 
             # particle is 1x3
             # odometry is 3x1
+            # future_particle should be 3x1
             future_particle = particle.T + transform(particle[-1]) @ odometry
 
-<<<<<<< HEAD
-            future_particles = new_particle + np.dot(transform(new_particle[-1]),odometry)
-            # xprime = a1*np.random.normal(future_particles[0])
-            # yprime = a2*np.random.normal(future_particles[1])
-            # thetaprime = a3*np.random.normal(future_particles[2])
-=======
             future_particle += np.array([[x_eps, y_eps, theta_eps]]).T
->>>>>>> 931c97663ac448ed915e8aedd2786d7c5c2ab887
 
             particles_updated.append(future_particle)
 
