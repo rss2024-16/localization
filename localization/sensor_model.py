@@ -156,6 +156,7 @@ class SensorModel:
         """
 
         if not self.map_set:
+            print('no map')
             return
 
         probabilities = []
@@ -169,17 +170,18 @@ class SensorModel:
         scans = np.clip(scans,0,zmax)
         observation = np.clip(observation,0,zmax)
 
+        weights = []
+
         for particle_scan in scans:
             d_idx = np.floor(particle_scan/step)
             zk_idx = np.floor(observation/step)
-            weights = []
             weight = 1
             for zk, d in zip(zk_idx,d_idx):
                 weight *= self.sensor_model_table[int(zk)][int(d)]
             weights.append(weight)
-            
         eta = sum(weights)
         probabilities = np.array(weights) / eta
+        print(sum(probabilities))
 
         return probabilities
 

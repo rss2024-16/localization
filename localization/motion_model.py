@@ -44,31 +44,30 @@ class MotionModel:
         
         rand_mod = lambda x: -1 + 2*random.random() #modifies random.random() to return in interval [-1,1]
         
-        normal_sample = lambda val: val/6 * sum([rand_mod(None) for i in range(1,13)])
-        triangle_sample = lambda val: val * rand_mod(None)
+        # normal_sample = lambda val: val/6 * sum([rand_mod(None) for i in range(1,13)])
+        # normal_sample = np.random.normal
 
-        dx,dy,dtheta = odometry[0],odometry[1],odometry[2]
-
-        # a1 = .74
-        # a2 = .07
-        # a3 = .07
-        # a4 = .12
-        a1 = .3
-        a2 = .3
-        a3 = .3
+        a1 = 1
+        a2 = 1
+        a3 = 1
 
         particles_updated = []
 
         for particle in particles:
-            # x,y,theta = particle[0],particle[1],particle[2]
+            x,y,theta = particle
 
-            future_particles = particle + transform(particle[-1]) * odometry #maybe need to do matrix multiplication
-            xprime = a1*normal_sample(future_particles[0])
-            yprime = a2*normal_sample(future_particles[1])
-            thetaprime = a3*normal_sample(future_particles[2])
+            xp = np.random.normal(x)
+            yp = np.random.normal(y)
+            thetap = np.random.normal(theta)
+            
+            new_particle = [xp,yp,thetap]
 
-            xt = [xprime,yprime,thetaprime]
-            particles_updated.append(xt)
+            future_particles = new_particle + transform(new_particle[-1]) * odometry
+            # xprime = a1*np.random.normal(future_particles[0])
+            # yprime = a2*np.random.normal(future_particles[1])
+            # thetaprime = a3*np.random.normal(future_particles[2])
+
+            particles_updated.append(future_particles)
 
             ###################### BOOK ALGORITHM ********************************
             # drot1 = math.atan2(dy,dx) - theta #change in rotation on car hemisphere
