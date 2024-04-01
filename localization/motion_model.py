@@ -62,7 +62,7 @@ class MotionModel:
         for particle in particles:
             # x,y,theta = particle[0],particle[1],particle[2]
 
-            future_particles = particle + transform(particle[-1]) * odometry
+            future_particles = particle + transform(particle[-1]) * odometry #maybe need to do matrix multiplication
             xprime = a1*normal_sample(future_particles[0])
             yprime = a2*normal_sample(future_particles[1])
             thetaprime = a3*normal_sample(future_particles[2])
