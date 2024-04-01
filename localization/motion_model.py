@@ -74,4 +74,4 @@ class MotionModel:
 
 
 
-        return particles_updated
+        return np.array(particles_updated)
