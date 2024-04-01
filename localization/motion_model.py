@@ -46,6 +46,9 @@ class MotionModel:
             y_eps = np.random.normal()
             theta_eps = np.random.normal()
 
+            # particle is 1x3
+            # odometry is 3x1
+            # future_particle should be 3x1
             future_particle = particle.T + transform(particle[-1]) @ odometry
 
             future_particle += np.array([[x_eps, y_eps, theta_eps]]).T
@@ -71,4 +74,4 @@ class MotionModel:
 
 
 
-        return particles_updated
+        return np.array(particles_updated)
