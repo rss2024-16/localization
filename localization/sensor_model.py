@@ -147,44 +147,41 @@ class SensorModel:
            probabilities: A vector of length N representing
                the probability of each particle existing
                given the observation and the map.
+
+        .. notes:
+            - particles is a bunch of random poses around your pose
+            - scans returns the laser scan at that pose
+            - comparing your laser scan with the scan at each pose to determine
+            likelihood that you are at that pose
         """
 
         if not self.map_set:
-            # print('map not set')
             return
 
-        # print(particles[1],observation)
-        ####################################
-        # TODO
-        # Evaluate the sensor model here!
-        #
-        # You will probably want to use this function
-        # to perform ray tracing from all the particles.
-        # This produces a matrix of size N x num_beams_per_particle 
-
-        # i have no fucking clue what is going on
+        probabilities = []
 
         particles = np.array(particles)
-        # print(particles)
+        step = self.resolution*self.lidar_scale_to_map_scale
+
         scans = self.scan_sim.scan(particles) # d
-        # print(scans)
-        zmax = 65.5
-        scans = np.clip(scans,0,65.5)
-        step = 65.5/self.table_width
 
+        zmax = (self.table_width-1)*step
+        scans = np.clip(scans,0,zmax)
+        observation = np.clip(observation,0,zmax)
 
-        for idx in range(len(scans)):
-            d = scans[idx]
-            zk_i = observation[idx]
+        for particle_scan in scans:
+            d_idx = np.floor(particle_scan/step)
+            zk_idx = np.floor(observation/step)
+            weights = []
+            weight = 1
+            for zk, d in zip(zk_idx,d_idx):
+                weight *= self.sensor_model_table[int(zk)][int(d)]
+            weights.append(weight)
+            
+        eta = sum(weights)
+        probabilities = np.array(weights) / eta
 
-            table_idx_d = np.floor(d/step)
-            table_idx_zk = np.floor(zk_i/step)
-            print(table_idx_d,table_idx_zk)
-            probability = self.sensor_model_table[table_idx_zk][table_idx_d]
-            print(probability)
-        # print(particles[1,1],scans[1,1])
-
-        ####################################
+        return probabilities
 
     def map_callback(self, map_msg):
         # Convert the map to a numpy array

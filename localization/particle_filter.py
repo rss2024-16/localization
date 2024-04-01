@@ -84,20 +84,25 @@ class ParticleFilter(Node):
         Whenever you get sensor data use the sensor model to compute the particle probabilities. 
         Then resample the particles based on these probabilities
         '''
-        angle_min = scan.angle_min
-        angle_increment = scan.angle_increment
+        if self.particles[0] != 0:
+            angle_min = scan.angle_min
+            angle_increment = scan.angle_increment
 
-        ranges = sorted(enumerate(scan.ranges), key = lambda x: x[1])[:100]
+            sample_size = 100
 
-        idx = 0
-        for particle in ranges:
-            theta = angle_min + angle_increment*particle[0]
-            x = particle[1] * np.sin(theta)
-            y = particle[1] * np.cos(theta)
-            self.particles[idx] = (x,y,theta)
-            idx+=1
-        
-        self.sensor_model.evaluate(self.particles,scan.ranges)
+            #sample by closest ranges
+            # ranges = sorted(enumerate(scan.ranges), key = lambda x: x[1])[:sample_size]
+            #sample randomly
+            observation = np.random.choice(scan.ranges,size=sample_size)
+
+            probabilities = self.sensor_model.evaluate(self.particles,observation)
+
+            # PROB_THRESHOLD = 0.1
+
+            # resampled_particles = np.array([particle[x] for x in range(len(normalized_probs))\
+            #                                  if normalized_probs[x] > PROB_THRESHOLD])
+
+
 
 
     def odom_callback(self,odom_data):
@@ -111,10 +116,19 @@ class ParticleFilter(Node):
 
     def pose_callback(self,pose_data):
         '''
-        Anytime the particles are update (either via the motion or sensor model), 
-        determine the "average" (term used loosely) particle pose and publish that transform.
+        Initializes all of the particles
         '''
-        pass
+        # self.get_logger().info(str(pose_data.pose.))
+        x = pose_data.pose.pose.position.x
+        y = pose_data.pose.pose.position.y
+        theta = 2*np.arccos(pose_data.pose.pose.orientation.w)
+        # self.get_logger().info(f'x: {x}\ny: {y}\n theta: {theta}\n')
+        xs = x + np.random.default_rng().uniform(low=-1.0,high=1.0,size=200)
+        ys = x + np.random.default_rng().uniform(low=-1.0,high=1.0,size=200)
+        #wraps the angles to 2*pi
+        thetas = np.angle(np.exp(1j * (theta + np.random.default_rng().uniform(low=0.0,high=2*np.pi,size=200) ) ))
+        self.particles = [(x,y,theta) for x,y,theta in zip(xs,ys,thetas)]
+        
         
 
 def main(args=None):
