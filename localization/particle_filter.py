@@ -21,6 +21,9 @@ class ParticleFilter(Node):
         self.declare_parameter('particle_filter_frame', "default")
         self.particle_filter_frame = self.get_parameter('particle_filter_frame').get_parameter_value().string_value
 
+        self.declare_parameter('num_particles', "default")
+        self.num_particles = self.get_parameter('num_particles').get_parameter_value().integer_value
+
         #  *Important Note #1:* It is critical for your particle
         #     filter to obtain the following topic names from the
         #     parameters for the autograder to work correctly. Note
@@ -51,6 +54,7 @@ class ParticleFilter(Node):
         #     "Pose Estimate" feature in RViz, which publishes to
         #     /initialpose.
 
+        self.avg_index = 0
         self.pose_sub = self.create_subscription(PoseWithCovarianceStamped, "/initialpose",
                                                  self.pose_callback,
                                                  1)
@@ -80,51 +84,47 @@ class ParticleFilter(Node):
         # Publish a transformation frame between the map
         # and the particle_filter_frame.
     
-    def laser_callback(self,scan):
+    def laser_callback(self, scan):
         '''
         Whenever you get sensor data use the sensor model to compute the particle probabilities. 
         Then resample the particles based on these probabilities
         '''
-        if len(self.particles) != 0:
-            sample_size = 100
+        weights = self.sensor_model.evaluate(self.particles, scan.ranges)
 
-            #sample by closest ranges
-            # ranges = sorted(enumerate(scan.ranges), key = lambda x: x[1])[:sample_size]
-            #sample randomly
-            observation = np.random.choice(scan.ranges,size=sample_size)
+        # Publish the new drifted "average"
+        self.avg_index = np.argmax(weights)
+        avg_pose = Odometry()
+        avg = self.particles[self.avg_index]
+        avg_pose.pose.pose.position.x = avg[0]
+        avg_pose.pose.pose.position.y = avg[1]
+        avg_pose.pose.pose.orientation.w = np.cos(1/2 * avg[2])
+        self.odom_pub.publish(avg_pose)
+        self.odom_pub.publish(avg_pose)
 
-            weights = self.sensor_model.evaluate(self.particles,observation)
-            if weights is not None:
+        # Resample
+        indices = np.arange(len(self.particles))
+        indices = np.random.choice(indices, size=self.num_particles, p=weights)
+        self.particles = [self.particles[i] for i in indices]
 
-                # self.get_logger().info(f'{probabilities}')
-
-                PROB_THRESHOLD = 0.1
-
-                resampled_particles = np.random.choice(self.particles,p=weights)
-
-                # resampled_particles = np.array([self.particles[x] for x in range(len(normalized_probs))\
-                #                                 if normalized_probs[x] > PROB_THRESHOLD])
-                
-                average_x = np.mean([x[0] for x in resampled_particles])
-                average_y = np.mean([x[1] for x in resampled_particles])
-                average_theta = math.atan2(sum([np.sin(x[2]) for x in resampled_particles]),\
-                                           sum([np.cos(x[2]) for x in resampled_particles]))
-                
-
-                self.get_logger().info(f'Sampled x: {average_x}\nSampled y: {average_y}\nSample theta: {average_theta}')
-
-
-
-    def odom_callback(self,odom_data):
+    def odom_callback(self, odom_data):
         '''
         Whenever you get odometry data use the motion model to update the particle positions
         '''
-        # print(odom_data.pose)
-        dx = odom_data.pose
-        # updated_particles = self.motion_model.evaluate(self.particles,dx)
+        # Let the particles drift
+        x = odom_data.pose.pose.position.x
+        y = odom_data.pose.pose.position.y
+        theta = 2*np.arccos(odom_data.pose.pose.orientation.w)
+        self.particles = self.motion_model.evaluate(self.particles, np.array([x, y, theta]))
 
+        # Publish the new drifted "average"
+        avg_pose = Odometry()
+        avg = self.particles[self.avg_index]
+        avg_pose.pose.pose.position.x = avg[0]
+        avg_pose.pose.pose.position.y = avg[1]
+        avg_pose.pose.pose.orientation.w = np.cos(1/2 * avg[2])
+        self.odom_pub.publish(avg_pose)
 
-    def pose_callback(self,pose_data):
+    def pose_callback(self, pose_data):
         '''
         Initializes all of the particles
         '''
@@ -134,11 +134,11 @@ class ParticleFilter(Node):
         theta = 2*np.arccos(pose_data.pose.pose.orientation.w)
         self.get_logger().info(f'Real x: {x}\nReal y: {y}\nReal theta: {theta}')
         # self.get_logger().info(f'x: {x}\ny: {y}\n theta: {theta}\n')
-        xs = x + np.random.default_rng().uniform(low=-1.0,high=1.0,size=200)
-        ys = y + np.random.default_rng().uniform(low=-1.0,high=1.0,size=200)
+        xs = x + np.random.default_rng().uniform(low=-1.0,high=1.0,size=self.num_particles)
+        ys = y + np.random.default_rng().uniform(low=-1.0,high=1.0,size=self.num_particles)
         #wraps the angles to 2*pi
-        thetas = np.angle(np.exp(1j * (theta + np.random.default_rng().uniform(low=0.0,high=2*np.pi,size=200) ) ))
-        self.particles = [(x,y,theta) for x,y,theta in zip(xs,ys,thetas)]
+        thetas = np.angle(np.exp(1j * (theta + np.random.default_rng().uniform(low=0.0,high=2*np.pi,size=self.num_particles) ) ))
+        self.particles = [np.array([x,y,theta]) for x,y,theta in zip(xs,ys,thetas)]
         
         
 

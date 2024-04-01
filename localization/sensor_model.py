@@ -154,6 +154,8 @@ class SensorModel:
             - comparing your laser scan with the scan at each pose to determine
             likelihood that you are at that pose
         """
+        #### WE NEED TO DOWNSAMPLE THE OBSERVATION
+        #### ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
         if not self.map_set:
             print('no map')
@@ -181,7 +183,7 @@ class SensorModel:
             weights.append(weight)
         eta = sum(weights)
         probabilities = np.array(weights) / eta
-        print(sum(probabilities))
+        #print(sum(probabilities))
 
         return probabilities
 
