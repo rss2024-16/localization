@@ -14,9 +14,6 @@ class MotionModel:
         pass
 
         ####################################
-    
-    def sample_normal_distribution(val):
-        return val/6 * sum([random.random() for i in range(1,13)])
 
     def evaluate(self, particles, odometry):
         """
@@ -27,7 +24,7 @@ class MotionModel:
             particles: An Nx3 matrix of the form:
 
                 [x0 y0 theta0]
-                [x1 y0 theta1]
+                [x1 y1 theta1]
                 [    ...     ]
 
             odometry: A 3-vector [dx dy dtheta]
@@ -41,33 +38,19 @@ class MotionModel:
                                              [np.sin(theta), np.cos(theta), 0],
                                              [0, 0, 1]
                                             ])
-        
-        rand_mod = lambda x: -1 + 2*random.random() #modifies random.random() to return in interval [-1,1]
-        
-        # normal_sample = lambda val: val/6 * sum([rand_mod(None) for i in range(1,13)])
-        # normal_sample = np.random.normal
-
-        a1 = 1
-        a2 = 1
-        a3 = 1
 
         particles_updated = []
 
         for particle in particles:
-            x,y,theta = particle
+            x_eps = np.random.normal()
+            y_eps = np.random.normal()
+            theta_eps = np.random.normal()
 
-            xp = np.random.normal(x)
-            yp = np.random.normal(y)
-            thetap = np.random.normal(theta)
-            
-            new_particle = [xp,yp,thetap]
+            future_particle = particle.T + transform(particle[-1]) @ odometry
 
-            future_particles = new_particle + transform(new_particle[-1]) * odometry
-            # xprime = a1*np.random.normal(future_particles[0])
-            # yprime = a2*np.random.normal(future_particles[1])
-            # thetaprime = a3*np.random.normal(future_particles[2])
+            future_particle += np.array([[x_eps, y_eps, theta_eps]]).T
 
-            particles_updated.append(future_particles)
+            particles_updated.append(future_particle)
 
             ###################### BOOK ALGORITHM ********************************
             # drot1 = math.atan2(dy,dx) - theta #change in rotation on car hemisphere
