@@ -111,17 +111,20 @@ class SensorModel:
 
         for d in range(self.table_width):
             for zk in range(self.table_width):
+                #calculate total probabilities and create table
                 ptotal = self.alpha_hit*phits[zk][d] + pothers[zk][d]
                 self.sensor_model_table[zk][d] = ptotal
 
         for col in range(self.sensor_model_table.shape[1]):
             #normalize columns to sum probabilities to 1
+            #columns represent a singular d value i.e. column 0 : d=0 column 1: d=1 etc
             self.sensor_model_table[:,col] = self.sensor_model_table[:,col] / sum(self.sensor_model_table[:,col])
 
-        # self.sensor_model_table = self.sensor_model_table / np.linalg.norm(self.sensor_model_table)
-        np.save('precomputed_table',self.sensor_model_table)
-        np.save('phits',phits)
-        np.save('pothers',pothers)
+        save = False
+        if save:
+            np.save('precomputed_table',self.sensor_model_table)
+            np.save('phits',phits)
+            np.save('pothers',pothers)
 
         
 
@@ -147,8 +150,10 @@ class SensorModel:
         """
 
         if not self.map_set:
+            # print('map not set')
             return
 
+        # print(particles[1],observation)
         ####################################
         # TODO
         # Evaluate the sensor model here!
@@ -157,7 +162,27 @@ class SensorModel:
         # to perform ray tracing from all the particles.
         # This produces a matrix of size N x num_beams_per_particle 
 
-        scans = self.scan_sim.scan(particles)
+        # i have no fucking clue what is going on
+
+        particles = np.array(particles)
+        # print(particles)
+        scans = self.scan_sim.scan(particles) # d
+        # print(scans)
+        zmax = 65.5
+        scans = np.clip(scans,0,65.5)
+        step = 65.5/self.table_width
+
+
+        for idx in range(len(scans)):
+            d = scans[idx]
+            zk_i = observation[idx]
+
+            table_idx_d = np.floor(d/step)
+            table_idx_zk = np.floor(zk_i/step)
+            print(table_idx_d,table_idx_zk)
+            probability = self.sensor_model_table[table_idx_zk][table_idx_d]
+            print(probability)
+        # print(particles[1,1],scans[1,1])
 
         ####################################
 

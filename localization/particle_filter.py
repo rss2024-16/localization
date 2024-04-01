@@ -5,11 +5,12 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from sensor_msgs.msg import LaserScan
 
+import numpy as np
+
 from rclpy.node import Node
 import rclpy
 
 assert rclpy
-
 
 class ParticleFilter(Node):
 
@@ -29,6 +30,8 @@ class ParticleFilter(Node):
         
         self.declare_parameter('odom_topic', "/odom")
         self.declare_parameter('scan_topic', "/scan")
+
+        self.particles = [0 for i in range(100)]
 
         scan_topic = self.get_parameter("scan_topic").get_parameter_value().string_value
         odom_topic = self.get_parameter("odom_topic").get_parameter_value().string_value
@@ -76,13 +79,41 @@ class ParticleFilter(Node):
         # Publish a transformation frame between the map
         # and the particle_filter_frame.
     
-    def laser_callback(self):
-        pass
+    def laser_callback(self,scan):
+        '''
+        Whenever you get sensor data use the sensor model to compute the particle probabilities. 
+        Then resample the particles based on these probabilities
+        '''
+        angle_min = scan.angle_min
+        angle_increment = scan.angle_increment
 
-    def odom_callback(self):
-        pass
+        ranges = sorted(enumerate(scan.ranges), key = lambda x: x[1])[:100]
 
-    def pose_callback(self):
+        idx = 0
+        for particle in ranges:
+            theta = angle_min + angle_increment*particle[0]
+            x = particle[1] * np.sin(theta)
+            y = particle[1] * np.cos(theta)
+            self.particles[idx] = (x,y,theta)
+            idx+=1
+        
+        self.sensor_model.evaluate(self.particles,scan.ranges)
+
+
+    def odom_callback(self,odom_data):
+        '''
+        Whenever you get odometry data use the motion model to update the particle positions
+        '''
+        # print(odom_data.pose)
+        dx = odom_data.pose
+        # updated_particles = self.motion_model.evaluate(self.particles,dx)
+
+
+    def pose_callback(self,pose_data):
+        '''
+        Anytime the particles are update (either via the motion or sensor model), 
+        determine the "average" (term used loosely) particle pose and publish that transform.
+        '''
         pass
         
 
