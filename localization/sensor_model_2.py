@@ -217,4 +217,4 @@ class SensorModel:
         # Make the map set
         self.map_set = True
 
-        print("Map initialized")o
+        print("Map initialized")
