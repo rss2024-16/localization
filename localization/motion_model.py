@@ -62,7 +62,7 @@ class MotionModel:
             
             new_particle = [xp,yp,thetap]
 
-            future_particles = new_particle + transform(new_particle[-1]) * odometry
+            future_particles = new_particle + np.dot(transform(new_particle[-1]),odometry)
             # xprime = a1*np.random.normal(future_particles[0])
             # yprime = a2*np.random.normal(future_particles[1])
             # thetaprime = a3*np.random.normal(future_particles[2])
