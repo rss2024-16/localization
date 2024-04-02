@@ -1,8 +1,5 @@
 import numpy as np
 
-import random
-import math
-
 class MotionModel:
 
     def __init__(self, node):

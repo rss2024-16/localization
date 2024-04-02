@@ -6,7 +6,6 @@ from geometry_msgs.msg import PoseWithCovarianceStamped
 from sensor_msgs.msg import LaserScan
 
 import numpy as np
-import math
 
 from rclpy.node import Node
 import rclpy
@@ -136,7 +135,7 @@ class ParticleFilter(Node):
         # self.get_logger().info(f'x: {x}\ny: {y}\n theta: {theta}\n')
         xs = x + np.random.default_rng().uniform(low=-1.0,high=1.0,size=self.num_particles)
         ys = y + np.random.default_rng().uniform(low=-1.0,high=1.0,size=self.num_particles)
-        #wraps the angles to 2*pi
+        #wraps the angles between -pi and +pi
         thetas = np.angle(np.exp(1j * (theta + np.random.default_rng().uniform(low=0.0,high=2*np.pi,size=self.num_particles) ) ))
         self.particles = [np.array([x,y,theta]) for x,y,theta in zip(xs,ys,thetas)]
         
