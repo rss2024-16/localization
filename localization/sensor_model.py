@@ -86,7 +86,7 @@ class SensorModel:
         returns:
             No return type. Directly modify `self.sensor_model_table`.
         """
-        zmax = self.table_width
+        zmax = self.table_width-1
 
         phits = np.empty((self.table_width, self.table_width))
         pothers = np.empty((self.table_width, self.table_width))
@@ -98,16 +98,16 @@ class SensorModel:
                 phit = 1/zmax * ( 1/np.sqrt(2*np.pi*self.sigma_hit**2) * np.exp(-(zk-d)**2/(2*self.sigma_hit**2)))
                 
                 pshort = 2/d * (1-zk/d) if zk <= d and d!= 0 else 0
-                pmax = 1 if zk == (zmax-1) else 0
+                pmax = 1 if zk == (zmax) else 0
                 prand = 1/zmax
 
                 phits[zk][d] = phit
                 pothers[zk][d] = self.alpha_short*pshort + self.alpha_rand*prand + self.alpha_max*pmax
 
         
-        for row in range(phits.shape[0]):
-            #normalize across increasing d values to sum phits to 1
-            phits[row,:] = phits[row,:] / sum(phits[row,:])
+        for col in range(phits.shape[1]):
+            #normalize phits across d values
+            phits[:,col] = phits[:,col] / sum(phits[:,col])
 
         for d in range(self.table_width):
             for zk in range(self.table_width):
@@ -158,7 +158,6 @@ class SensorModel:
         #### ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
         if not self.map_set:
-            print('no map')
             return
 
         probabilities = []
@@ -181,11 +180,11 @@ class SensorModel:
             for zk, d in zip(zk_idx,d_idx):
                 weight *= self.sensor_model_table[int(zk)][int(d)]
             weights.append(weight)
-        eta = sum(weights)
-        probabilities = np.array(weights) / eta
+        # eta = sum(weights)
+        # probabilities = np.array(weights) / eta
         #print(sum(probabilities))
 
-        return probabilities
+        return weights
 
     def map_callback(self, map_msg):
         # Convert the map to a numpy array
