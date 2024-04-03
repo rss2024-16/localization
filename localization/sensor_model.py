@@ -155,27 +155,28 @@ class SensorModel:
             - comparing your laser scan with the scan at each pose to determine
             likelihood that you are at that pose
         """
-
         if not self.map_set:
             return
 
-        probabilities = []
-
         particles = np.array(particles) #tur
-        step = self.resolution*self.lidar_scale_to_map_scale
-
         scans = self.scan_sim.scan(particles) # d
 
+        #convert from meters to pixels
+        step = self.resolution*self.lidar_scale_to_map_scale
+        scans = scans/ step
+        observation = observation / step
+
+        #clip all distances to be within 0 to zmax
         zmax = (self.table_width-1)*step
         scans = np.clip(scans,0,zmax)
         observation = np.clip(observation,0,zmax)
 
         for particle_scan in scans:
-            d_idx = np.floor(particle_scan/step)
-            zk_idx = np.floor(observation/step)
+            # d_idx = np.floor(particle_scan/step)
+            # zk_idx = np.floor(observation/step)
             weights = []
             weight = 1
-            for zk, d in zip(zk_idx,d_idx):
+            for zk, d in zip(observation,particle_scan):
                 weight *= self.sensor_model_table[int(zk)][int(d)]
             weights.append(weight)
 

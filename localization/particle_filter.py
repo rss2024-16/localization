@@ -95,7 +95,7 @@ class ParticleFilter(Node):
 
             weights = self.sensor_model.evaluate(self.particles,observation)
             if weights is not None:
-
+  
                 # self.get_logger().info(f'{probabilities}')
 
                 PROB_THRESHOLD = 0.1
