@@ -168,7 +168,7 @@ class SensorModel:
         #convert from meters to pixels
         step = self.resolution*self.lidar_scale_to_map_scale
         scans = scans/ step
-        observation = observation / step
+        observation = np.array(observation) / step
 
         #clip to be within 0 to zmax
         zmax = (self.table_width-1)*step
