@@ -1,6 +1,6 @@
 import numpy as np
 from scan_simulator_2d import PyScanSimulator2D
-# Try to change to just `from scan_simulator_2d import PyScanSimulator2D` 
+# Try to change to just `from scan_simulator_2d import PyScanSimulator2D`
 # if any error re: scan_simulator_2d occurs
 
 from tf_transformations import euler_from_quaternion
@@ -71,7 +71,7 @@ class SensorModel:
         """
         Generate and store a table which represents the sensor model.
 
-        For each discrete computed range value, this provides the probability of 
+        For each discrete computed range value, this provides the probability of
         measuring any (discrete) range. This table is indexed by the sensor model
         at runtime by discretizing the measurements and computed ranges from
         RangeLibc.
@@ -96,7 +96,7 @@ class SensorModel:
             for zk in range(self.table_width): #rows
 
                 phit = 1/zmax * ( 1/np.sqrt(2*np.pi*self.sigma_hit**2) * np.exp(-(zk-d)**2/(2*self.sigma_hit**2)))
-                
+
                 pshort = 2/d * (1-zk/d) if zk <= d and d!= 0 else 0
                 pmax = 1 if zk == (zmax-1) else 0
                 prand = 1/zmax
@@ -104,7 +104,7 @@ class SensorModel:
                 phits[zk][d] = phit
                 pothers[zk][d] = self.alpha_short*pshort + self.alpha_rand*prand + self.alpha_max*pmax
 
-        
+
         for row in range(phits.shape[0]):
             #normalize across increasing d values to sum phits to 1
             phits[row,:] = phits[row,:] / sum(phits[row,:])
@@ -126,7 +126,7 @@ class SensorModel:
             np.save('phits',phits)
             np.save('pothers',pothers)
 
-        
+
 
     def evaluate(self, particles, observation):
         """
@@ -156,7 +156,6 @@ class SensorModel:
         """
 
         if not self.map_set:
-            print('no map')
             return
 
         probabilities = []
@@ -170,19 +169,20 @@ class SensorModel:
         scans = np.clip(scans,0,zmax)
         observation = np.clip(observation,0,zmax)
 
-        weights = []
-
         for particle_scan in scans:
             d_idx = np.floor(particle_scan/step)
             zk_idx = np.floor(observation/step)
+            weights = []
             weight = 1
             for zk, d in zip(zk_idx,d_idx):
                 weight *= self.sensor_model_table[int(zk)][int(d)]
             weights.append(weight)
+
         eta = sum(weights)
         probabilities = np.array(weights) / eta
-        print(sum(probabilities))
 
+        # consider "squashing" probability by raising it to a power of less than one
+        # in order to make distributions less peaked
         return probabilities
 
     def map_callback(self, map_msg):
