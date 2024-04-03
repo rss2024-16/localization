@@ -5,6 +5,8 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped, Pose, PoseArray 
 from sensor_msgs.msg import LaserScan
 
+from ackermann_msgs.msg import AckermannDriveStamped # Test
+
 import numpy as np
 
 from rclpy.node import Node
@@ -56,7 +58,7 @@ class ParticleFilter(Node):
         #     "Pose Estimate" feature in RViz, which publishes to
         #     /initialpose.
 
-        self.avg_index = 0
+        self.weighted_avg = np.array([0.0, 0.0, 0.0])
         self.pose_sub = self.create_subscription(PoseWithCovarianceStamped, "/initialpose",
                                                  self.pose_callback,
                                                  1)
@@ -72,7 +74,8 @@ class ParticleFilter(Node):
 
         self.poses_pub = self.create_publisher(PoseArray, "mcl", 1)
 
-        self.timer_callback = self.create_timer(1, self.timer_cb)
+        self.viz_timer = self.create_timer(1, self.timer_cb)
+        self.pose_timer = self.create_timer(1.0/20.0, self.pose_cb)
 
         # Initialize the models
         self.motion_model = MotionModel(self)
@@ -89,6 +92,9 @@ class ParticleFilter(Node):
         #
         # Publish a transformation frame between the map
         # and the particle_filter_frame.
+
+        # Test
+        self.cmd_pub = self.create_publisher(AckermannDriveStamped, "/drive", 10)
 
     def part_to_pose(self, particle):
         '''
@@ -122,11 +128,10 @@ class ParticleFilter(Node):
             if len(self.particles) > 0:
                 weights = self.sensor_model.evaluate(self.particles, scan.ranges)
 
-                # Publish the new drifted "average"
-                self.avg_index = np.argmax(weights)
-                avg = self.particles[self.avg_index]
-                avg_pose = self.part_to_odom(avg)
-                self.odom_pub.publish(avg_pose)
+                # Update the new drifted average
+                weighted = np.average(self.particles[:, :2], axis=0, weights=weights)
+                theta_mean = np.arctan2(np.mean(np.sin(self.particles[:, -1])), np.mean(np.cos(self.particles[:, -1])))
+                self.weighted_avg = np.array([weighted[0], weighted[1], theta_mean])
 
                 # Resample
                 indices = np.arange(len(self.particles))
@@ -150,10 +155,10 @@ class ParticleFilter(Node):
                     dx = np.array([x,y,theta]) - self.previous_pose
                     self.particles = self.motion_model.evaluate(self.particles, dx)
 
-                    # Publish the new drifted "average"
-                    avg = self.particles[self.avg_index]
-                    avg_pose = self.part_to_odom(avg)
-                    self.odom_pub.publish(avg_pose)
+                    # Let the average drift
+                    self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dx)
+
+                    self.previous_pose = np.array([x,y,theta])
 
     def pose_callback(self, pose_data):
         '''
@@ -185,6 +190,16 @@ class ParticleFilter(Node):
 
             poses_msg.poses = poses
             self.poses_pub.publish(poses_msg)
+
+            drive_cmd = AckermannDriveStamped()
+            drive_cmd.drive.speed = -0.5
+            drive_cmd.drive.steering_angle = 0.0
+            self.cmd_pub.publish(drive_cmd)
+
+    def pose_cb(self):
+        avg_pose = self.part_to_odom(self.weighted_avg)
+        self.odom_pub.publish(avg_pose)
+
         
 def main(args=None):
     rclpy.init(args=args)

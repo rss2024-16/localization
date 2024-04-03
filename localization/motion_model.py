@@ -8,6 +8,15 @@ class MotionModel:
                                              [0, 0, 1]
                                             ])
 
+    def evaluate_noiseless(self, particle, odometry):
+        # particle is 1x3
+        # odometry is 3x1
+        # future_particle should be 3x1
+        future_particle = particle.T + self.transform(particle[-1]) @ odometry.T
+        future_particle = future_particle.T
+
+        return np.array(future_particle)
+
 
     def evaluate(self, particles, odometry):
         """
