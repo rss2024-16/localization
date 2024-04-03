@@ -180,11 +180,12 @@ class SensorModel:
             for zk, d in zip(zk_idx,d_idx):
                 weight *= self.sensor_model_table[int(zk)][int(d)]
             weights.append(weight)
-        # eta = sum(weights)
-        # probabilities = np.array(weights) / eta
-        #print(sum(probabilities))
 
-        return weights
+        weights = np.power(np.array(weights), 1/3)
+        eta = np.sum(weights)
+        probabilities = weights / eta
+
+        return probabilities
 
     def map_callback(self, map_msg):
         # Convert the map to a numpy array

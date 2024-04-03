@@ -2,7 +2,7 @@ from localization.sensor_model import SensorModel
 from localization.motion_model import MotionModel
 
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped, Pose, PoseArray 
 from sensor_msgs.msg import LaserScan
 
 import numpy as np
@@ -11,7 +11,6 @@ from rclpy.node import Node
 import rclpy
 
 import threading
-import os
 
 assert rclpy
 
@@ -71,9 +70,9 @@ class ParticleFilter(Node):
 
         self.odom_pub = self.create_publisher(Odometry, "/pf/pose/odom", 1)
 
-        self.test_pub = self.create_publisher(Odometry, odom_topic, 10)
+        self.poses_pub = self.create_publisher(PoseArray, "mcl", 1)
 
-        self.timer_callback = self.create_timer(10,self.timer_cb)
+        self.timer_callback = self.create_timer(1, self.timer_cb)
 
         # Initialize the models
         self.motion_model = MotionModel(self)
@@ -91,10 +90,28 @@ class ParticleFilter(Node):
         # Publish a transformation frame between the map
         # and the particle_filter_frame.
 
-        self.reals = []
-        self.x_diff = []
-        self.y_diff = []
-        self.theta_diff = []
+    def part_to_pose(self, particle):
+        '''
+        Converts a particle [x, y, theta] to a pose message and returns it
+        '''
+        pose_msg = Pose()
+        pose_msg.position.x = particle[0]
+        pose_msg.position.y = particle[1]
+        pose_msg.position.z = 0.0
+        pose_msg.orientation.x = 0.0
+        pose_msg.orientation.y = 0.0
+        pose_msg.orientation.z = np.sin(1/2 * particle[2])
+        pose_msg.orientation.w = np.cos(1/2 * particle[2])
+        return pose_msg
+
+    def part_to_odom(self, particle):
+        '''
+        Converts a particle [x, y, theta] to an odometry message and returns it
+        '''
+        odom_msg = Odometry()
+        odom_msg.header.frame_id = "/map"
+        odom_msg.pose.pose = self.part_to_pose(particle)
+        return odom_msg
     
     def laser_callback(self, scan):
         '''
@@ -103,30 +120,18 @@ class ParticleFilter(Node):
         '''
         with lock:
             if len(self.particles) > 0:
-                ranges_sample = np.random.choice(scan.ranges,size=self.num_particles)
-                weights = self.sensor_model.evaluate(self.particles, ranges_sample)
+                weights = self.sensor_model.evaluate(self.particles, scan.ranges)
 
                 # Publish the new drifted "average"
                 self.avg_index = np.argmax(weights)
-                avg_pose = Odometry()
                 avg = self.particles[self.avg_index]
-                avg_pose.pose.pose.position.x = avg[0]
-                avg_pose.pose.pose.position.y = avg[1]
-                avg_pose.pose.pose.orientation.w = np.cos(1/2 * avg[2])
-                self.get_logger().info(f'\n-----\nSensor x: {avg[0]}\nSensor y: {avg[1]}\nSensor theta: {np.cos(avg[2]/2)}\n-----')
-                self.x_diff.append(self.reals[0] - avg[0])
-                self.y_diff.append(self.reals[1] - avg[1])
-                self.theta_diff.append(self.reals[2] - np.cos(1/2 * avg[2]))
+                avg_pose = self.part_to_odom(avg)
                 self.odom_pub.publish(avg_pose)
-                #do we mean to publish twice?
-                # self.odom_pub.publish(avg_pose)
 
                 # Resample
                 indices = np.arange(len(self.particles))
                 indices = np.random.choice(indices, size=self.num_particles, p=weights)
-                # I think this may have bad time complexity, chatGPT says O(nlog(m))
                 self.particles = np.array([self.particles[i] for i in indices])
-                # self.particles = np.random.choice(self.particles,size=self.num_particles,p=weights)
 
     def odom_callback(self, odom_data):
         '''
@@ -146,15 +151,8 @@ class ParticleFilter(Node):
                     self.particles = self.motion_model.evaluate(self.particles, dx)
 
                     # Publish the new drifted "average"
-                    avg_pose = Odometry()
                     avg = self.particles[self.avg_index]
-                    avg_pose.pose.pose.position.x = avg[0]
-                    avg_pose.pose.pose.position.y = avg[1]
-                    avg_pose.pose.pose.orientation.w = np.cos(1/2 * avg[2])
-                    self.get_logger().info(f'\n-----\nMotion x: {avg[0]}\nMotion y: {avg[1]}\nMotion theta: {np.cos(avg[2]/2)}\n-----')
-                    self.x_diff.append(self.reals[0] - avg[0])
-                    self.y_diff.append(self.reals[1] - avg[1])
-                    self.theta_diff.append(self.reals[2] - np.cos(1/2 * avg[2]))
+                    avg_pose = self.part_to_odom(avg)
                     self.odom_pub.publish(avg_pose)
 
     def pose_callback(self, pose_data):
@@ -165,41 +163,38 @@ class ParticleFilter(Node):
             x = pose_data.pose.pose.position.x
             y = pose_data.pose.pose.position.y
             theta = 2*np.arccos(pose_data.pose.pose.orientation.w)
-            self.reals = [x,y,theta]
 
-            self.get_logger().info(f'\n-----\nReal x: {x}\nReal y: {y}\nReal theta: {theta}\n-----')
-            # self.get_logger().info(f'x: {x}\ny: {y}\n theta: {theta}\n')
-            xs = x + np.random.default_rng().uniform(low=-1.0,high=1.0,size=self.num_particles)
-            ys = y + np.random.default_rng().uniform(low=-1.0,high=1.0,size=self.num_particles)
-            #wraps the angles between -pi and +pi
-            thetas = np.angle(np.exp(1j * (theta + np.random.default_rng().uniform(low=0.0,high=2*np.pi,size=self.num_particles) ) ))
+            #self.get_logger().info(f'\n-----\nReal x: {x}\nReal y: {y}\nReal theta: {theta}\n-----')
+            self.get_logger().info(str(pose_data.pose.pose))
+
+            xs = x + np.random.default_rng().uniform(low=-1.0, high=1.0, size=self.num_particles)
+            ys = y + np.random.default_rng().uniform(low=-1.0, high=1.0, size=self.num_particles)
+
+            # Wrap the angles between -pi and +pi
+            thetas = np.angle(np.exp(1j * (theta + np.random.default_rng().uniform(low=0.0, high=2*np.pi, size=self.num_particles) ) ))
             self.particles = np.array([np.array([x,y,theta]) for x,y,theta in zip(xs,ys,thetas)])
 
-
     def timer_cb(self):
-        avg_pose = Odometry()
-        avg_pose.pose.pose.position.x = 0.0
-        avg_pose.pose.pose.position.y = 0.0
-        avg_pose.pose.pose.orientation.w = 0.0
-        self.test_pub.publish(avg_pose)
-        
-        
+        if len(self.particles) > 0:
+            poses_msg = PoseArray()
+            poses_msg.header.frame_id = "/map"
 
+            poses = []
+            for particle in self.particles:
+                poses.append(self.part_to_pose(particle))
+
+            poses_msg.poses = poses
+            self.poses_pub.publish(poses_msg)
+        
 def main(args=None):
     rclpy.init(args=args)
 
     global lock
-    #thread locking so sensor and motion do not update list at the same time
+
+    # Thread lock so sensor and motion do not update list at the same time
     lock = threading.Lock()
 
     pf = ParticleFilter()
 
-    path = os.getcwd()
-    try:
-        rclpy.spin(pf)
-    except KeyboardInterrupt:
-        np.save(path+'/x_diff',pf.x_diff)
-        np.save(path+'/y_diff',pf.y_diff)
-        np.save(path+'/theta_diff',pf.theta_diff)
-        np.save(path+'/real',pf.reals)
+    rclpy.spin(pf)
     rclpy.shutdown()
