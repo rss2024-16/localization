@@ -191,10 +191,10 @@ class ParticleFilter(Node):
             poses_msg.poses = poses
             self.poses_pub.publish(poses_msg)
 
-            drive_cmd = AckermannDriveStamped()
-            drive_cmd.drive.speed = -0.5
-            drive_cmd.drive.steering_angle = 0.0
-            self.cmd_pub.publish(drive_cmd)
+            # drive_cmd = AckermannDriveStamped()
+            # drive_cmd.drive.speed = -0.5
+            # drive_cmd.drive.steering_angle = 0.0
+            # self.cmd_pub.publish(drive_cmd)
 
     def pose_cb(self):
         avg_pose = self.part_to_odom(self.weighted_avg)

@@ -167,8 +167,8 @@ class SensorModel:
 
         #convert from meters to pixels
         step = self.resolution*self.lidar_scale_to_map_scale
-        scans = scans/ step
-        observation = np.array(observation) / step
+        # scans = scans/ step
+        # observation = np.array(observation) / step
 
         #clip to be within 0 to zmax
         zmax = (self.table_width-1)*step
@@ -178,14 +178,14 @@ class SensorModel:
         weights = []
 
         for particle_scan in scans:
-            # d_idx = np.floor(particle_scan/step)
-            # zk_idx = np.floor(observation/step)
+            d_idx = np.floor(particle_scan/step)
+            zk_idx = np.floor(observation/step)
             weight = 1
-            for zk, d in zip(observation,particle_scan):
+            for zk, d in zip(zk_idx,d_idx):
                 weight *= self.sensor_model_table[int(zk)][int(d)]
             weights.append(weight)
 
-        weights = np.power(np.array(weights), 1/3)
+        weights = np.power(np.array(weights), 1/3) #1/2.2 is good according to TA
         eta = np.sum(weights)
         probabilities = weights / eta
 
