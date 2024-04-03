@@ -107,6 +107,7 @@ class SensorModel:
         
         for row in range(phits.shape[0]):
             #normalize across increasing d values to sum phits to 1
+            #across columns
             phits[row,:] = phits[row,:] / sum(phits[row,:])
 
         for d in range(self.table_width):
@@ -161,7 +162,7 @@ class SensorModel:
 
         probabilities = []
 
-        particles = np.array(particles)
+        particles = np.array(particles) #tur
         step = self.resolution*self.lidar_scale_to_map_scale
 
         scans = self.scan_sim.scan(particles) # d
