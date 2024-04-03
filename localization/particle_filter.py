@@ -126,7 +126,11 @@ class ParticleFilter(Node):
         '''
         with lock:
             if len(self.particles) > 0:
-                weights = self.sensor_model.evaluate(self.particles, scan.ranges)
+                ranges = scan.ranges
+                new_ranges = ranges[: : len(ranges)//self.num_particles]
+                while len(new_ranges) < self.num_particles:
+                    new_ranges = new_ranges + ranges[-self.num_particles-len(new_ranges):]
+                weights = self.sensor_model.evaluate(self.particles, new_ranges)
 
                 # Update the new drifted average
                 weighted = np.average(self.particles[:, :2], axis=0, weights=weights)
