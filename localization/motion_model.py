@@ -41,6 +41,13 @@ class MotionModel:
         particles_updated = []
 
         for particle in particles:
+            # Standard deviation for the random noise, in meters (?)
+            std = 0.1
+
+            x_eps = np.random.normal(scale=std)
+            y_eps = np.random.normal(scale=std)
+            theta_eps = np.random.normal(scale=std)
+
             # particle is 1x3
             # odometry is 3x1
             # future_particle should be 3x1
