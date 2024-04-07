@@ -128,7 +128,7 @@ class ParticleFilter(Node):
             if len(self.particles) > 0:
                 ranges = scan.ranges
                 new_ranges = ranges[: : len(ranges)//self.num_particles]
-                while len(new_ranges) < self.num_particles:
+                while len(new_ranges) < self.num_beams_per_particle:
                     new_ranges = new_ranges + ranges[-(self.num_particles-len(new_ranges)):]
                 weights = self.sensor_model.evaluate(self.particles, new_ranges)
 
