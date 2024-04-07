@@ -3,6 +3,8 @@ import numpy as np
 class MotionModel:
 
     def __init__(self, node):
+        self.deterministic = False
+
         self.transform = lambda theta: np.array([ [np.cos(theta), -np.sin(theta), 0],
                                              [np.sin(theta), np.cos(theta), 0],
                                              [0, 0, 1]
@@ -52,7 +54,15 @@ class MotionModel:
             future_particle = particle.T + self.transform(particle[-1]) @ odometry.T
             future_particle = future_particle.T
 
-            future_particle += np.array([x_eps, y_eps, theta_eps])
+            if not self.deterministic:
+                # Standard deviation for the random noise, in meters (?)
+                std = 0.2
+
+                x_eps = np.random.normal(scale=std)
+                y_eps = np.random.normal(scale=std)
+                theta_eps = np.random.normal(scale=std)
+
+                future_particle += np.array([x_eps, y_eps, theta_eps])
 
             particles_updated.append(future_particle)
 

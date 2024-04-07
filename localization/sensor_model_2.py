@@ -1,6 +1,6 @@
 import numpy as np
 from scan_simulator_2d import PyScanSimulator2D
-# Try to change to just `from scan_simulator_2d import PyScanSimulator2D`
+# Try to change to just `from scan_simulator_2d import PyScanSimulator2D` 
 # if any error re: scan_simulator_2d occurs
 
 from tf_transformations import euler_from_quaternion
@@ -31,11 +31,11 @@ class SensorModel:
 
         ####################################
         # Adjust these parameters
-        self.alpha_hit = 0.74
-        self.alpha_short = 0.07
-        self.alpha_max = 0.07
-        self.alpha_rand = 0.12
-        self.sigma_hit = 8
+        self.alpha_hit = 0
+        self.alpha_short = 0
+        self.alpha_max = 0
+        self.alpha_rand = 0
+        self.sigma_hit = 0
 
         # Your sensor table will be a `table_width` x `table_width` np array:
         self.table_width = 201
@@ -71,7 +71,7 @@ class SensorModel:
         """
         Generate and store a table which represents the sensor model.
 
-        For each discrete computed range value, this provides the probability of
+        For each discrete computed range value, this provides the probability of 
         measuring any (discrete) range. This table is indexed by the sensor model
         at runtime by discretizing the measurements and computed ranges from
         RangeLibc.
@@ -86,7 +86,8 @@ class SensorModel:
         returns:
             No return type. Directly modify `self.sensor_model_table`.
         """
-        zmax = self.table_width-1
+
+        zmax = self.table_width
 
         phits = np.empty((self.table_width, self.table_width))
         pothers = np.empty((self.table_width, self.table_width))
@@ -96,18 +97,19 @@ class SensorModel:
             for zk in range(self.table_width): #rows
 
                 phit = 1/zmax * ( 1/np.sqrt(2*np.pi*self.sigma_hit**2) * np.exp(-(zk-d)**2/(2*self.sigma_hit**2)))
-
+                
                 pshort = 2/d * (1-zk/d) if zk <= d and d!= 0 else 0
-                pmax = 1 if zk == (zmax) else 0
+                pmax = 1 if zk == (zmax-1) else 0
                 prand = 1/zmax
 
                 phits[zk][d] = phit
                 pothers[zk][d] = self.alpha_short*pshort + self.alpha_rand*prand + self.alpha_max*pmax
 
-
-        for col in range(phits.shape[1]):
-            #normalize phits across d values
-            phits[:,col] = phits[:,col] / sum(phits[:,col])
+        
+        for row in range(phits.shape[0]):
+            #normalize across increasing d values to sum phits to 1
+            #across columns
+            phits[row,:] = phits[row,:] / sum(phits[row,:])
 
         for d in range(self.table_width):
             for zk in range(self.table_width):
@@ -125,7 +127,6 @@ class SensorModel:
             np.save('precomputed_table',self.sensor_model_table)
             np.save('phits',phits)
             np.save('pothers',pothers)
-
 
 
     def evaluate(self, particles, observation):
@@ -147,48 +148,45 @@ class SensorModel:
            probabilities: A vector of length N representing
                the probability of each particle existing
                given the observation and the map.
-
-        .. notes:
-            - particles is a bunch of random poses around your pose
-            - scans returns the laser scan at that pose
-            - comparing your laser scan with the scan at each pose to determine
-            likelihood that you are at that pose
         """
-        #### WE NEED TO DOWNSAMPLE THE OBSERVATION
-        #### ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
         if not self.map_set:
             return
 
-        particles = np.array(particles) 
-        scans = self.scan_sim.scan(particles) # d
+        ####################################
+        # TODO
+        # Evaluate the sensor model here!
+        #
+        # You will probably want to use this function
+        # to perform ray tracing from all the particles.
+        # This produces a matrix of size N x num_beams_per_particle 
 
-        #convert from meters to pixels
-        step = self.resolution*self.lidar_scale_to_map_scale
-        # scans = scans/ step
-        # observation = np.array(observation) / step
+        scans = self.scan_sim.scan(particles) #this is an N by num_beams_per_particle matrix
+        #each row of the matrix is num_beams_per_particle row of lidar scans from the map
 
-        #clip to be within 0 to zmax
+        step = self.resolution * self.lidar_scale_to_map_scale
+        scans = scans/ step
+        observation = observation / step
+
         zmax = (self.table_width-1)*step
         scans = np.clip(scans,0,zmax)
-        observation = np.clip(observation,0,zmax)
+        observation = np.clip(observation,0,zmax) 
 
+        #TODO downsample the observations irl (sim is fine though)
+
+
+        probabilities = []
         for particle_scan in scans:
-            # d_idx = np.floor(particle_scan/step)
-            # zk_idx = np.floor(observation/step)
-            weights = []
-            weight = 1
-            for zk, d in zip(observation,particle_scan):
-                weight *= self.sensor_model_table[int(zk)][int(d)]
-            weights.append(weight)
+            probability = self.sensor_model_table[particle_scan, observation] #should be a vector
+            probabilities.append(np.product(probability))
+        
+        probabilities/=sum(probabilities)
+        #matrix of probabilities
 
-        weights = np.power(np.array(weights), 1/3) #1/2.2 is good according to TA
-        eta = np.sum(weights)
-        probabilities = weights / eta
+        #multiple across the rows
+        #and then normalize
 
-        # consider "squashing" probability by raising it to a power of less than one
-        # in order to make distributions less peaked
-        return probabilities
+        ####################################
 
     def map_callback(self, map_msg):
         # Convert the map to a numpy array

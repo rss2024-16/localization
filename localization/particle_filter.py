@@ -172,7 +172,6 @@ class ParticleFilter(Node):
 
                     # Let the average drift
                     self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dx)
-
                     self.previous_pose = np.array([x,y,theta])
 
     def pose_callback(self, pose_data):
