@@ -2,12 +2,14 @@ from localization.sensor_model import SensorModel
 from localization.motion_model import MotionModel
 
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseWithCovarianceStamped, Pose, PoseArray 
+from geometry_msgs.msg import PoseWithCovarianceStamped, Pose, PoseArray, TransformStamped
 from sensor_msgs.msg import LaserScan
 
 from ackermann_msgs.msg import AckermannDriveStamped # Test
 
 import numpy as np
+from tf_transformations import euler_from_quaternion, quaternion_from_euler
+import tf2_ros
 
 from rclpy.node import Node
 import rclpy
@@ -26,6 +28,14 @@ class ParticleFilter(Node):
 
         self.declare_parameter('num_particles', "default")
         self.num_particles = self.get_parameter('num_particles').get_parameter_value().integer_value
+
+        # For some reason no matter what I do it either tells me this parameter was already declared or is never declared
+        self.num_beams_per_particle = 100
+        # if self.has_parameter('num_beams_per_particle'):
+        #     self.num_beams_per_particle = self.get_parameter('num_beams_per_particle').get_parameter_value().integer_value
+        # else:
+        #     self.declare_parameter('num_beams_per_particle', "default")
+        #     self.num_beams_per_particle = self.get_parameter('num_beams_per_particle').get_parameter_value().integer_value
 
         #  *Important Note #1:* It is critical for your particle
         #     filter to obtain the following topic names from the
@@ -71,6 +81,7 @@ class ParticleFilter(Node):
         #     "/map" frame.
 
         self.odom_pub = self.create_publisher(Odometry, "/pf/pose/odom", 1)
+        self.br = tf2_ros.TransformBroadcaster(self)
 
         self.poses_pub = self.create_publisher(PoseArray, "mcl", 1)
 
@@ -125,11 +136,11 @@ class ParticleFilter(Node):
         Then resample the particles based on these probabilities
         '''
         with lock:
-            if len(self.particles) > 0:
+            if len(self.particles) > 0 and len(scan.ranges) > 0:
                 ranges = scan.ranges
-                new_ranges = ranges[: : len(ranges)//self.num_particles]
-                while len(new_ranges) < self.num_particles:
-                    new_ranges = new_ranges + ranges[-(self.num_particles-len(new_ranges)):]
+                new_ranges = ranges[: : len(ranges)//self.num_beams_per_particle]
+                while len(new_ranges) < self.num_beams_per_particle:
+                    new_ranges = new_ranges + ranges[-(self.num_beams_per_particle-len(new_ranges)):]
                 weights = self.sensor_model.evaluate(self.particles, new_ranges)
 
                 # Update the new drifted average
@@ -171,7 +182,15 @@ class ParticleFilter(Node):
         with lock:
             x = pose_data.pose.pose.position.x
             y = pose_data.pose.pose.position.y
-            theta = 2*np.arccos(pose_data.pose.pose.orientation.w)
+
+            orientation = euler_from_quaternion((
+            pose_data.pose.pose.orientation.x,
+            pose_data.pose.pose.orientation.y,
+            pose_data.pose.pose.orientation.z,
+            pose_data.pose.pose.orientation.w))
+            theta = orientation[2]
+
+            self.weighted_avg = np.array([x, y, theta])
 
             #self.get_logger().info(f'\n-----\nReal x: {x}\nReal y: {y}\nReal theta: {theta}\n-----')
             self.get_logger().info(str(pose_data.pose.pose))
@@ -204,7 +223,21 @@ class ParticleFilter(Node):
         avg_pose = self.part_to_odom(self.weighted_avg)
         self.odom_pub.publish(avg_pose)
 
-        
+        # Also publish a transform 
+        obj = TransformStamped()
+        obj.header.stamp = self.get_clock().now().to_msg()
+        obj.header.frame_id = "/map"
+        obj.child_frame_id = "/base_link"
+        obj.transform.translation.x = self.weighted_avg[0]
+        obj.transform.translation.y = self.weighted_avg[1]
+        obj.transform.translation.z = 0.0
+
+        obj.transform.rotation.x = 0.0
+        obj.transform.rotation.y = 0.0
+        obj.transform.rotation.z = np.sin(1/2 * self.weighted_avg[2])
+        obj.transform.rotation.w = np.cos(1/2 * self.weighted_avg[2])
+        self.br.sendTransform(obj)
+
 def main(args=None):
     rclpy.init(args=args)
 

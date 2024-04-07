@@ -40,7 +40,7 @@ class MotionModel:
 
         for particle in particles:
             # Standard deviation for the random noise, in meters (?)
-            std = 0.2
+            std = 0.1
 
             x_eps = np.random.normal(scale=std)
             y_eps = np.random.normal(scale=std)
