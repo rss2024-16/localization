@@ -86,7 +86,7 @@ class SensorModel:
         returns:
             No return type. Directly modify `self.sensor_model_table`.
         """
-        zmax = self.table_width
+        zmax = self.table_width-1
 
         phits = np.empty((self.table_width, self.table_width))
         pothers = np.empty((self.table_width, self.table_width))
@@ -98,17 +98,16 @@ class SensorModel:
                 phit = 1/zmax * ( 1/np.sqrt(2*np.pi*self.sigma_hit**2) * np.exp(-(zk-d)**2/(2*self.sigma_hit**2)))
 
                 pshort = 2/d * (1-zk/d) if zk <= d and d!= 0 else 0
-                pmax = 1 if zk == (zmax-1) else 0
+                pmax = 1 if zk == (zmax) else 0
                 prand = 1/zmax
 
                 phits[zk][d] = phit
                 pothers[zk][d] = self.alpha_short*pshort + self.alpha_rand*prand + self.alpha_max*pmax
 
 
-        for row in range(phits.shape[0]):
-            #normalize across increasing d values to sum phits to 1
-            #across columns
-            phits[row,:] = phits[row,:] / sum(phits[row,:])
+        for col in range(phits.shape[1]):
+            #normalize phits across d values
+            phits[:,col] = phits[:,col] / sum(phits[:,col])
 
         for d in range(self.table_width):
             for zk in range(self.table_width):
@@ -155,18 +154,21 @@ class SensorModel:
             - comparing your laser scan with the scan at each pose to determine
             likelihood that you are at that pose
         """
+        #### WE NEED TO DOWNSAMPLE THE OBSERVATION
+        #### ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
         if not self.map_set:
             return
 
-        particles = np.array(particles) #tur
+        particles = np.array(particles) 
         scans = self.scan_sim.scan(particles) # d
 
         #convert from meters to pixels
         step = self.resolution*self.lidar_scale_to_map_scale
-        scans = scans/ step
-        observation = observation / step
+        # scans = scans/ step
+        # observation = np.array(observation) / step
 
-        #clip all distances to be within 0 to zmax
+        #clip to be within 0 to zmax
         zmax = (self.table_width-1)*step
         scans = np.clip(scans,0,zmax)
         observation = np.clip(observation,0,zmax)
@@ -180,8 +182,9 @@ class SensorModel:
                 weight *= self.sensor_model_table[int(zk)][int(d)]
             weights.append(weight)
 
-        eta = sum(weights)
-        probabilities = np.array(weights) / eta
+        weights = np.power(np.array(weights), 1/3) #1/2.2 is good according to TA
+        eta = np.sum(weights)
+        probabilities = weights / eta
 
         # consider "squashing" probability by raising it to a power of less than one
         # in order to make distributions less peaked
