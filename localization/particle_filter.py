@@ -163,7 +163,7 @@ class ParticleFilter(Node):
             if len(self.particles) > 0:
                 # Let the particles drift
                 x = odom_data.twist.twist.linear.x
-                y = odom_data.twist.twist.linear.y
+                y = odom_data.twist.twist.linear.y # y doesn't change at all 
                 # theta = 2*np.arccos(odom_data.pose.pose.orientation.w)
                 # theta = np.arctan2(odom_data.twist.twist.linear.y,odom_data.twist.twist.linear.x)
                 theta = odom_data.twist.twist.angular.z
