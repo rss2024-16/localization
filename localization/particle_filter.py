@@ -10,6 +10,7 @@ from ackermann_msgs.msg import AckermannDriveStamped # Test
 import numpy as np
 from tf_transformations import euler_from_quaternion, quaternion_from_euler
 import tf2_ros
+import time
 
 from rclpy.node import Node
 import rclpy
@@ -107,7 +108,7 @@ class ParticleFilter(Node):
         # Test
         self.cmd_pub = self.create_publisher(AckermannDriveStamped, "/drive", 10)
 
-        self.t1 = self.get_clock().now()
+        self.t1 = float(self.get_clock().now().nanoseconds)/1e9
 
     def part_to_pose(self, particle):
         '''
@@ -142,6 +143,7 @@ class ParticleFilter(Node):
                 ranges = scan.ranges
                 new_ranges = ranges[: : 11]
                 weights = self.sensor_model.evaluate(self.particles, new_ranges)
+                # self.get_logger().info(f'{weights}')
 
                 # Update the new drifted average
                 weighted = np.average(self.particles[:, :2], axis=0, weights=weights)
@@ -157,30 +159,36 @@ class ParticleFilter(Node):
         '''
         Whenever you get odometry data use the motion model to update the particle positions
         '''
-        with lock:
-            if len(self.particles) > 0:
-                # Let the particles drift
-                x = odom_data.twist.twist.linear.x
-                y = odom_data.twist.twist.linear.y # y doesn't change at all 
-                # theta = 2*np.arccos(odom_data.pose.pose.orientation.w)
-                # theta = np.arctan2(odom_data.twist.twist.linear.y,odom_data.twist.twist.linear.x)
-                theta = odom_data.twist.twist.angular.z
+        # self.get_logger().info('odom')
+        do = True
+        if do:
+            with lock:
+                if len(self.particles) > 0:
+                    # Let the particles drift
+                    x = odom_data.twist.twist.linear.x
+                    y = odom_data.twist.twist.linear.y
+                    # theta = 2*np.arccos(odom_data.pose.pose.orientation.w)
+                    # theta = np.arctan2(odom_data.twist.twist.linear.y,odom_data.twist.twist.linear.x)
+                    theta = odom_data.twist.twist.angular.z
 
-                self.get_logger().info(f'-----\nX: {-x}\nY: {-y}\nTheta: {-theta}\n-----\n')
+                    # if self.previous_pose is None:
+                    #     self.previous_pose = -np.array([x,y,theta])
+                    # else:
 
-                dv = -np.array([x,y,theta]) 
-                #this might be the first thing we want to check
-                now = self.get_clock().now().nanoseconds/1e9
-                dt = now - self.t1
+                    self.get_logger().info(str(theta))
+                    dv = -np.array([x,y,theta])# - self.previous_pose
+                    #this might be the first thing we want to check
+                    dt = time.time()-self.t1
 
-                dx = dv*dt
-                self.particles = self.motion_model.evaluate(self.particles, dx)
+                    dx = dv*dt
+                    # self.get_logger().info(f'-----\nX: {dx[0]}\nY: {dx[1]}\nTheta: {dx[2]}\n-----\n')
+                    self.particles = self.motion_model.evaluate(self.particles, dx)
 
-                # Let the average drift
-                self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dv)
-                # self.previous_pose = np.array([x,y,theta])
+                    # Let the average drift
+                    self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dx)
+                    # self.previous_pose = np.array([x,y,theta])
 
-                self.t1 = now
+                    self.t1 = float(self.get_clock().now().nanoseconds)/1e9
 
     def pose_callback(self, pose_data):
         '''
@@ -197,10 +205,12 @@ class ParticleFilter(Node):
             pose_data.pose.pose.orientation.w))
             theta = orientation[2]
 
+            # self.get_logger().info(f'Theta: {theta}')
+
             self.weighted_avg = np.array([x, y, theta])
 
             #self.get_logger().info(f'\n-----\nReal x: {x}\nReal y: {y}\nReal theta: {theta}\n-----')
-            self.get_logger().info(str(pose_data.pose.pose))
+            # self.get_logger().info(str(pose_data.pose.pose))
 
             xs = x + np.random.default_rng().uniform(low=-1.0, high=1.0, size=self.num_particles)
             ys = y + np.random.default_rng().uniform(low=-1.0, high=1.0, size=self.num_particles)
@@ -219,6 +229,7 @@ class ParticleFilter(Node):
                 poses.append(self.part_to_pose(particle))
 
             poses_msg.poses = poses
+            # if self.poses_pub.get_num_connections() > 0:
             self.poses_pub.publish(poses_msg)
 
             drive_cmd = AckermannDriveStamped()

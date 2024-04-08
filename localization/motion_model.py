@@ -10,6 +10,8 @@ class MotionModel:
                                              [0, 0, 1]
                                             ])
 
+        self.n = node
+
     def evaluate_noiseless(self, particle, odometry):
         # particle is 1x3
         # odometry is 3x1
@@ -41,12 +43,9 @@ class MotionModel:
         particles_updated = []
 
         for particle in particles:
-            # Standard deviation for the random noise, in meters (?)
-            std = 0.1
 
-            x_eps = np.random.normal(scale=std)
-            y_eps = np.random.normal(scale=std)
-            theta_eps = np.random.normal(scale=std)
+
+            # Standard deviation for the random noise, in meters (?)
 
             # particle is 1x3
             # odometry is 3x1
@@ -54,13 +53,15 @@ class MotionModel:
             future_particle = particle.T + self.transform(particle[-1]) @ odometry.T
             future_particle = future_particle.T
 
+            # self.deterministic = True
             if not self.deterministic:
                 # Standard deviation for the random noise, in meters (?)
-                std = 0.2
+                linear_noise = .05
+                angular_noise = .05
 
-                x_eps = np.random.normal(scale=std)
-                y_eps = np.random.normal(scale=std)
-                theta_eps = np.random.normal(scale=std)
+                x_eps = np.random.normal(scale=linear_noise)
+                y_eps = np.random.normal(scale=linear_noise)
+                theta_eps = np.random.normal(scale=angular_noise)
 
                 future_particle += np.array([x_eps, y_eps, theta_eps])
 

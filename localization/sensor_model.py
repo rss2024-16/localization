@@ -23,16 +23,19 @@ class SensorModel:
 
         self.map_topic = node.get_parameter('map_topic').get_parameter_value().string_value
         self.num_beams_per_particle = node.get_parameter('num_beams_per_particle').get_parameter_value().integer_value
+        # node.get_logger().info(f' beams: {self.num_beams_per_particle}')
         self.scan_theta_discretization = node.get_parameter(
             'scan_theta_discretization').get_parameter_value().double_value
         self.scan_field_of_view = node.get_parameter('scan_field_of_view').get_parameter_value().double_value
         self.lidar_scale_to_map_scale = node.get_parameter(
             'lidar_scale_to_map_scale').get_parameter_value().double_value
 
+        self.n = node
+
         ####################################
         # Adjust these parameters
-        self.alpha_hit = 0.74
-        self.alpha_short = 0.07
+        self.alpha_hit = 0.71
+        self.alpha_short = 0.1
         self.alpha_max = 0.07
         self.alpha_rand = 0.12
         self.sigma_hit = 8
@@ -156,8 +159,10 @@ class SensorModel:
         """
         #### WE NEED TO DOWNSAMPLE THE OBSERVATION
         #### ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        # self.n.get_logger().info('hi')
 
         if not self.map_set:
+            self.n.get_logger().info('SET THE MAP DUMBASS')
             return
 
         particles = np.array(particles) 
@@ -165,20 +170,20 @@ class SensorModel:
 
         #convert from meters to pixels
         step = self.resolution*self.lidar_scale_to_map_scale
-        # scans = scans/ step
-        # observation = np.array(observation) / step
+        # scans = scans/step
+        # observation = np.array(observation)/step
 
         #clip to be within 0 to zmax
         zmax = (self.table_width-1)*step
         scans = np.clip(scans,0,zmax)
         observation = np.clip(observation,0,zmax)
-
+        # self.get_logger.info(str(len(scans)))
+        weights = []
+        zk_index = np.floor(observation/step)
         for particle_scan in scans:
-            # d_idx = np.floor(particle_scan/step)
-            # zk_idx = np.floor(observation/step)
-            weights = []
             weight = 1
-            for zk, d in zip(observation,particle_scan):
+            d_index = np.floor(particle_scan/step)
+            for zk, d in zip(zk_index,d_index):
                 weight *= self.sensor_model_table[int(zk)][int(d)]
             weights.append(weight)
 
