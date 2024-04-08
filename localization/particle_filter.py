@@ -30,7 +30,7 @@ class ParticleFilter(Node):
         self.num_particles = self.get_parameter('num_particles').get_parameter_value().integer_value
 
         # For some reason no matter what I do it either tells me this parameter was already declared or is never declared
-        self.num_beams_per_particle = 100
+        self.num_beams_per_particle = 99
         # if self.has_parameter('num_beams_per_particle'):
         #     self.num_beams_per_particle = self.get_parameter('num_beams_per_particle').get_parameter_value().integer_value
         # else:
@@ -140,9 +140,7 @@ class ParticleFilter(Node):
         with lock:
             if len(self.particles) > 0 and len(scan.ranges) > 0:
                 ranges = scan.ranges
-                new_ranges = ranges[: : len(ranges)//self.num_beams_per_particle]
-                while len(new_ranges) < self.num_beams_per_particle:
-                    new_ranges = new_ranges + ranges[-(self.num_beams_per_particle-len(new_ranges)):]
+                new_ranges = ranges[: : 11]
                 weights = self.sensor_model.evaluate(self.particles, new_ranges)
 
                 # Update the new drifted average
@@ -151,7 +149,7 @@ class ParticleFilter(Node):
                 self.weighted_avg = np.array([weighted[0], weighted[1], theta_mean])
 
                 # Resample
-                indices = np.arange(len(self.particles))
+                indices = np.arange(self.num_particles)
                 indices = np.random.choice(indices, size=self.num_particles, p=weights)
                 self.particles = np.array([self.particles[i] for i in indices])
 
@@ -170,21 +168,19 @@ class ParticleFilter(Node):
 
                 self.get_logger().info(f'-----\nX: {-x}\nY: {-y}\nTheta: {-theta}\n-----\n')
 
-                if self.previous_pose is None:
-                    self.previous_pose = np.array([x,y,theta])
-                else:
-                    dx = -np.array([x,y,theta]) - self.previous_pose
-                    #this might be the first thing we want to check
-                    dt = self.get_clock().now()-self.t1
+                dv = -np.array([x,y,theta]) 
+                #this might be the first thing we want to check
+                now = self.get_clock().now().nanoseconds/1e9
+                dt = now - self.t1
 
-                    dv = dx*dt
-                    self.particles = self.motion_model.evaluate(self.particles, dv)
+                dx = dv*dt
+                self.particles = self.motion_model.evaluate(self.particles, dx)
 
-                    # Let the average drift
-                    self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dv)
-                    self.previous_pose = np.array([x,y,theta])
+                # Let the average drift
+                self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dv)
+                # self.previous_pose = np.array([x,y,theta])
 
-                    self.t1 = self.get_clock().now()
+                self.t1 = now
 
     def pose_callback(self, pose_data):
         '''
@@ -225,10 +221,10 @@ class ParticleFilter(Node):
             poses_msg.poses = poses
             self.poses_pub.publish(poses_msg)
 
-            # drive_cmd = AckermannDriveStamped()
-            # drive_cmd.drive.speed = -0.5
-            # drive_cmd.drive.steering_angle = 0.0
-            # self.cmd_pub.publish(drive_cmd)
+            drive_cmd = AckermannDriveStamped()
+            drive_cmd.drive.speed = -0.5
+            drive_cmd.drive.steering_angle = 0.0
+            self.cmd_pub.publish(drive_cmd)
 
     def pose_cb(self):
         avg_pose = self.part_to_odom(self.weighted_avg)

@@ -13,7 +13,7 @@
   <node pkg="localization" exec="laser_transform" output="screen"/>
 
   <node pkg="localization" exec="particle_filter" name="particle_filter" output="screen">
-      <param from="$(find-pkg-share localization)/params.yaml"/>
+      <param from="$(find-pkg-share localization)/real_params.yaml"/>
   </node>
 
 </launch>
