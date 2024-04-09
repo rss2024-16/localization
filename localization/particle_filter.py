@@ -2,6 +2,7 @@ from localization.sensor_model import SensorModel
 from localization.motion_model import MotionModel
 
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Float32
 from geometry_msgs.msg import PoseWithCovarianceStamped, Pose, PoseArray, TransformStamped
 from sensor_msgs.msg import LaserScan
 
@@ -57,7 +58,6 @@ class ParticleFilter(Node):
                                                   self.laser_callback,
                                                   1)
 
-        self.previous_pose = None
         self.odom_sub = self.create_subscription(Odometry, odom_topic,
                                                  self.odom_callback,
                                                  1)
@@ -106,6 +106,13 @@ class ParticleFilter(Node):
 
         # Test
         self.cmd_pub = self.create_publisher(AckermannDriveStamped, "/drive", 10)
+
+        # Metrics
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        self.converge_pub = self.create_publisher(Float32, 'converge', 10)
+
+        self.prev_t = self.get_clock().now().nanoseconds*1e-9
 
     def part_to_pose(self, particle):
         '''
@@ -160,20 +167,18 @@ class ParticleFilter(Node):
         with lock:
             if len(self.particles) > 0:
                 # Let the particles drift
-                x = odom_data.pose.pose.position.x
-                y = odom_data.pose.pose.position.y
-                theta = 2*np.arccos(odom_data.pose.pose.orientation.w)
+                x = odom_data.twist.twist.linear.x
+                y = odom_data.twist.twist.linear.y
+                theta = odom_data.twist.twist.angular.z
 
-                if self.previous_pose is None:
-                    self.previous_pose = np.array([x,y,theta])
-                else:
-                    dx = np.array([x,y,theta]) - self.previous_pose
-                    self.particles = self.motion_model.evaluate(self.particles, dx)
+                dt = self.get_clock().now().nanoseconds*1e-9 - self.prev_t
 
-                    # Let the average drift
-                    self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dx)
+                dx = np.array([x,y,theta]) * dt
+                self.particles = self.motion_model.evaluate(self.particles, dx)
 
-                    self.previous_pose = np.array([x,y,theta])
+                # Let the average drift
+                self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dx)
+                self.prev_t = self.get_clock().now().nanoseconds*1e-9
 
     def pose_callback(self, pose_data):
         '''
@@ -219,24 +224,35 @@ class ParticleFilter(Node):
             # drive_cmd.drive.steering_angle = 0.0
             # self.cmd_pub.publish(drive_cmd)
 
+            msg = Float32()
+            try:
+                transform = self.tf_buffer.lookup_transform('map', 'laser_model', rclpy.time.Time())
+                x = transform.transform.translation.x
+                y = transform.transform.translation.y
+                msg.data = np.sqrt((self.weighted_avg[0] - x)**2 + (self.weighted_avg[1] - y)**2)
+            except:
+                msg.data = 100.0
+
+            self.converge_pub.publish(msg)
+
     def pose_cb(self):
         avg_pose = self.part_to_odom(self.weighted_avg)
         self.odom_pub.publish(avg_pose)
 
-        # Also publish a transform 
-        obj = TransformStamped()
-        obj.header.stamp = self.get_clock().now().to_msg()
-        obj.header.frame_id = "/map"
-        obj.child_frame_id = "/base_link"
-        obj.transform.translation.x = self.weighted_avg[0]
-        obj.transform.translation.y = self.weighted_avg[1]
-        obj.transform.translation.z = 0.0
+        # # Also publish a transform 
+        # obj = TransformStamped()
+        # obj.header.stamp = self.get_clock().now().to_msg()
+        # obj.header.frame_id = "/map"
+        # obj.child_frame_id = "/base_link"
+        # obj.transform.translation.x = self.weighted_avg[0]
+        # obj.transform.translation.y = self.weighted_avg[1]
+        # obj.transform.translation.z = 0.0
 
-        obj.transform.rotation.x = 0.0
-        obj.transform.rotation.y = 0.0
-        obj.transform.rotation.z = np.sin(1/2 * self.weighted_avg[2])
-        obj.transform.rotation.w = np.cos(1/2 * self.weighted_avg[2])
-        self.br.sendTransform(obj)
+        # obj.transform.rotation.x = 0.0
+        # obj.transform.rotation.y = 0.0
+        # obj.transform.rotation.z = np.sin(1/2 * self.weighted_avg[2])
+        # obj.transform.rotation.w = np.cos(1/2 * self.weighted_avg[2])
+        # self.br.sendTransform(obj)
 
 def main(args=None):
     rclpy.init(args=args)

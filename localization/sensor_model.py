@@ -157,9 +157,6 @@ class SensorModel:
         #### WE NEED TO DOWNSAMPLE THE OBSERVATION
         #### ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-        if not self.map_set:
-            return
-
         probabilities = []
 
         particles = np.array(particles)
