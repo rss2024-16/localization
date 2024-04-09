@@ -35,7 +35,7 @@ class SensorModel:
         ####################################
         # Adjust these parameters
         self.alpha_hit = 0.71
-        self.alpha_short = 0.1
+        self.alpha_short = 0.10
         self.alpha_max = 0.07
         self.alpha_rand = 0.12
         self.sigma_hit = 8
@@ -123,7 +123,7 @@ class SensorModel:
             #columns represent a singular d value i.e. column 0 : d=0 column 1: d=1 etc
             self.sensor_model_table[:,col] = self.sensor_model_table[:,col] / sum(self.sensor_model_table[:,col])
 
-        save = False
+        save = True
         if save:
             np.save('precomputed_table',self.sensor_model_table)
             np.save('phits',phits)

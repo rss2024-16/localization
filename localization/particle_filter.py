@@ -110,6 +110,9 @@ class ParticleFilter(Node):
 
         self.t1 = float(self.get_clock().now().nanoseconds)/1e9
 
+        self.sensor_times = []
+        self.motion_times = []
+
     def part_to_pose(self, particle):
         '''
         Converts a particle [x, y, theta] to a pose message and returns it
@@ -140,6 +143,7 @@ class ParticleFilter(Node):
         '''
         with lock:
             if len(self.particles) > 0 and len(scan.ranges) > 0:
+                t1 = time.time()
                 ranges = scan.ranges
                 new_ranges = ranges[: : 11]
                 weights = self.sensor_model.evaluate(self.particles, new_ranges)
@@ -155,40 +159,42 @@ class ParticleFilter(Node):
                 indices = np.random.choice(indices, size=self.num_particles, p=weights)
                 self.particles = np.array([self.particles[i] for i in indices])
 
+                self.sensor_times.append(time.time()-t1)
+
     def odom_callback(self, odom_data):
         '''
         Whenever you get odometry data use the motion model to update the particle positions
         '''
-        # self.get_logger().info('odom')
-        do = True
-        if do:
-            with lock:
-                if len(self.particles) > 0:
-                    # Let the particles drift
-                    x = odom_data.twist.twist.linear.x
-                    y = odom_data.twist.twist.linear.y
-                    # theta = 2*np.arccos(odom_data.pose.pose.orientation.w)
-                    # theta = np.arctan2(odom_data.twist.twist.linear.y,odom_data.twist.twist.linear.x)
-                    theta = odom_data.twist.twist.angular.z
+        with lock:
+            if len(self.particles) > 0:
+                t1 = time.time()
+                # Let the particles drift
+                x = odom_data.twist.twist.linear.x
+                y = odom_data.twist.twist.linear.y
+                # theta = 2*np.arccos(odom_data.pose.pose.orientation.w)
+                # theta = np.arctan2(odom_data.twist.twist.linear.y,odom_data.twist.twist.linear.x)
+                theta = odom_data.twist.twist.angular.z
 
-                    # if self.previous_pose is None:
-                    #     self.previous_pose = -np.array([x,y,theta])
-                    # else:
+                # if self.previous_pose is None:
+                #     self.previous_pose = -np.array([x,y,theta])
+                # else:
 
-                    self.get_logger().info(str(theta))
-                    dv = -np.array([x,y,theta])# - self.previous_pose
-                    #this might be the first thing we want to check
-                    dt = time.time()-self.t1
+                self.get_logger().info(str(theta))
+                dv = -np.array([x,y,theta])# - self.previous_pose
+                #this might be the first thing we want to check
+                dt = time.time()-self.t1
 
-                    dx = dv*dt
-                    # self.get_logger().info(f'-----\nX: {dx[0]}\nY: {dx[1]}\nTheta: {dx[2]}\n-----\n')
-                    self.particles = self.motion_model.evaluate(self.particles, dx)
+                dx = dv*dt
+                # self.get_logger().info(f'-----\nX: {dx[0]}\nY: {dx[1]}\nTheta: {dx[2]}\n-----\n')
+                self.particles = self.motion_model.evaluate(self.particles, dx)
 
-                    # Let the average drift
-                    self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dx)
-                    # self.previous_pose = np.array([x,y,theta])
+                # Let the average drift
+                self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dx)
+                # self.previous_pose = np.array([x,y,theta])
 
-                    self.t1 = float(self.get_clock().now().nanoseconds)/1e9
+                self.t1 = float(self.get_clock().now().nanoseconds)/1e9
+
+                self.motion_times.append(time.time() - t1)
 
     def pose_callback(self, pose_data):
         '''
@@ -265,6 +271,9 @@ def main(args=None):
     lock = threading.Lock()
 
     pf = ParticleFilter()
-
-    rclpy.spin(pf)
+    try:
+        rclpy.spin(pf)
+    except KeyboardInterrupt:
+        np.save('sensortimes',pf.sensor_times)
+        np.save('motiontimes',pf.motion_times)
     rclpy.shutdown()
