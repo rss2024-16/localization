@@ -18,7 +18,7 @@ class MotionModel:
         return np.array(future_particle)
 
 
-    def evaluate(self, particles, odometry):
+    def evaluate(self, particles: np.array, odometry):
         """
         Update the particles to reflect probable
         future states given the odometry data.
@@ -57,3 +57,4 @@ class MotionModel:
             particles_updated.append(future_particle)
 
         return np.array(particles_updated)
+    

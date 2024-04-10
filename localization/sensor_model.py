@@ -66,6 +66,8 @@ class SensorModel:
             self.map_topic,
             self.map_callback,
             1)
+        
+        self.node = node
 
     def precompute_sensor_model(self):
         """
@@ -128,7 +130,7 @@ class SensorModel:
 
         
 
-    def evaluate(self, particles, observation):
+    def evaluate(self, particles: np.array, observation):
         """
         Evaluate how likely each particle is given
         the observed scan.
@@ -159,7 +161,7 @@ class SensorModel:
 
         probabilities = []
 
-        particles = np.array(particles)
+        # particles = np.array(particles)
         scans = self.scan_sim.scan(particles) # d
 
         #convert from meters to pixels
@@ -173,13 +175,13 @@ class SensorModel:
         observation = np.clip(observation,0,zmax)
 
         weights = []
-
+        zk_idx = np.floor(observation/step).astype(int)
+        # self.node.get_logger().info("length"+ str(len(zk_idx))+ " "+str(scans.shape[1]))
         for particle_scan in scans:
-            d_idx = np.floor(particle_scan/step)
-            zk_idx = np.floor(observation/step)
             weight = 1
-            for zk, d in zip(zk_idx,d_idx):
-                weight *= self.sensor_model_table[int(zk)][int(d)]
+            d_idx = np.floor(particle_scan/step).astype(int)
+            for zk, d in zip(zk_idx, d_idx):
+                weight *= self.sensor_model_table[zk][d]
             weights.append(weight)
 
         weights = np.power(np.array(weights), 1/3) #1/2.2 is good according to TA

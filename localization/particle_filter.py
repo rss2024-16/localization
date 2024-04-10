@@ -49,7 +49,8 @@ class ParticleFilter(Node):
         self.declare_parameter('odom_topic', "/odom")
         self.declare_parameter('scan_topic', "/scan")
 
-        self.particles = []
+        # self.particles = []
+        self.particles = np.empty((self.num_particles, 3))
 
         scan_topic = self.get_parameter("scan_topic").get_parameter_value().string_value
         odom_topic = self.get_parameter("odom_topic").get_parameter_value().string_value
@@ -145,10 +146,8 @@ class ParticleFilter(Node):
         with lock:
             if len(self.particles) > 0 and len(scan.ranges) > 0:
                 ranges = scan.ranges
-                new_ranges = ranges[: : len(ranges)//self.num_beams_per_particle]
-                while len(new_ranges) < self.num_beams_per_particle:
-                    new_ranges = new_ranges + ranges[-(self.num_beams_per_particle-len(new_ranges)):]
-                weights = self.sensor_model.evaluate(self.particles, new_ranges)
+                # new_ranges = ranges[: : 11]
+                weights = self.sensor_model.evaluate(self.particles, ranges)
 
                 # Update the new drifted average
                 weighted = np.average(self.particles[:, :2], axis=0, weights=weights)
@@ -158,7 +157,7 @@ class ParticleFilter(Node):
                 # Resample
                 indices = np.arange(len(self.particles))
                 indices = np.random.choice(indices, size=self.num_particles, p=weights)
-                self.particles = np.array([self.particles[i] for i in indices])
+                self.particles:np.array = np.array([self.particles[i] for i in indices])
 
     def odom_callback(self, odom_data):
         '''
@@ -174,7 +173,7 @@ class ParticleFilter(Node):
                 dt = self.get_clock().now().nanoseconds*1e-9 - self.prev_t
 
                 dx = np.array([x,y,theta]) * dt
-                self.particles = self.motion_model.evaluate(self.particles, dx)
+                self.particles :np.array = self.motion_model.evaluate(self.particles, dx)
 
                 # Let the average drift
                 self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dx)
@@ -219,10 +218,10 @@ class ParticleFilter(Node):
             poses_msg.poses = poses
             self.poses_pub.publish(poses_msg)
 
-            # drive_cmd = AckermannDriveStamped()
-            # drive_cmd.drive.speed = -0.5
-            # drive_cmd.drive.steering_angle = 0.0
-            # self.cmd_pub.publish(drive_cmd)
+            drive_cmd = AckermannDriveStamped()
+            drive_cmd.drive.speed = -0.5
+            drive_cmd.drive.steering_angle = 0.0
+            self.cmd_pub.publish(drive_cmd)
 
             msg = Float32()
             try:
@@ -236,6 +235,7 @@ class ParticleFilter(Node):
             self.converge_pub.publish(msg)
 
     def pose_cb(self):
+
         avg_pose = self.part_to_odom(self.weighted_avg)
         self.odom_pub.publish(avg_pose)
 
@@ -266,3 +266,8 @@ def main(args=None):
 
     rclpy.spin(pf)
     rclpy.shutdown()
+
+
+# ros2 launch localization localize.launch.xml
+# ros2 launch racecar_simulator simulate.launch.xml
+# ros2 launch wall_follower wall_follower.launch.xml
