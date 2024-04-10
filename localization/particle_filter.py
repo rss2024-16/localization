@@ -167,26 +167,18 @@ class ParticleFilter(Node):
                     # Let the particles drift
                     x = odom_data.twist.twist.linear.x
                     y = odom_data.twist.twist.linear.y
-                    # theta = 2*np.arccos(odom_data.pose.pose.orientation.w)
-                    # theta = np.arctan2(odom_data.twist.twist.linear.y,odom_data.twist.twist.linear.x)
                     theta = odom_data.twist.twist.angular.z
-
-                    # if self.previous_pose is None:
-                    #     self.previous_pose = -np.array([x,y,theta])
-                    # else:
-
                     self.get_logger().info(str(theta))
-                    dv = -np.array([x,y,theta])# - self.previous_pose
+
+                    dv = -np.array([x,y,theta])
                     #this might be the first thing we want to check
                     dt = time.time()-self.t1
-
                     dx = dv*dt
                     # self.get_logger().info(f'-----\nX: {dx[0]}\nY: {dx[1]}\nTheta: {dx[2]}\n-----\n')
                     self.particles = self.motion_model.evaluate(self.particles, dx)
 
                     # Let the average drift
                     self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dx)
-                    # self.previous_pose = np.array([x,y,theta])
 
                     self.t1 = float(self.get_clock().now().nanoseconds)/1e9
 
