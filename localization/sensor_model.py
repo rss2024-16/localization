@@ -69,6 +69,7 @@ class SensorModel:
             self.map_topic,
             self.map_callback,
             1)
+        
 
     def precompute_sensor_model(self):
         """
@@ -162,7 +163,7 @@ class SensorModel:
         # self.n.get_logger().info('hi')
 
         if not self.map_set:
-            self.n.get_logger().info('SET THE MAP DUMBASS')
+            self.n.get_logger().info('SET THE MAP')
             return
 
         particles = np.array(particles) 
@@ -170,29 +171,27 @@ class SensorModel:
 
         #convert from meters to pixels
         step = self.resolution*self.lidar_scale_to_map_scale
-        # scans = scans/step
-        # observation = np.array(observation)/step
 
         #clip to be within 0 to zmax
         zmax = (self.table_width-1)*step
         scans = np.clip(scans,0,zmax)
         observation = np.clip(observation,0,zmax)
-        # self.get_logger.info(str(len(scans)))
+
         weights = []
         zk_index = np.floor(observation/step)
         for particle_scan in scans:
             weight = 1
             d_index = np.floor(particle_scan/step)
-            for zk, d in zip(zk_index,d_index):
-                weight *= self.sensor_model_table[int(zk)][int(d)]
+            # for zk, d in zip(zk_index,d_index):
+            #     weight *= self.sensor_model_table[int(zk)][int(d)]
+            # weights.append(weight)
+            weight = np.prod(self.sensor_model_table[zk_index,d_index])
             weights.append(weight)
 
         weights = np.power(np.array(weights), 1/3) #1/2.2 is good according to TA
         eta = np.sum(weights)
         probabilities = weights / eta
 
-        # consider "squashing" probability by raising it to a power of less than one
-        # in order to make distributions less peaked
         return probabilities
 
     def map_callback(self, map_msg):
