@@ -178,10 +178,10 @@ class SensorModel:
         observation = np.clip(observation,0,zmax)
 
         weights = []
-        zk_index = np.floor(observation/step)
+        zk_index = np.floor(observation/step).astype(int)
         for particle_scan in scans:
             weight = 1
-            d_index = np.floor(particle_scan/step)
+            d_index = np.floor(particle_scan/step).astype(int)
             # for zk, d in zip(zk_index,d_index):
             #     weight *= self.sensor_model_table[int(zk)][int(d)]
             # weights.append(weight)
