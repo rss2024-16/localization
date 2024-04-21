@@ -87,7 +87,7 @@ class ParticleFilter(Node):
         self.poses_pub = self.create_publisher(PoseArray, "mcl", 1)
 
         self.viz_timer = self.create_timer(1, self.timer_cb)
-        self.pose_timer = self.create_timer(1.0/20.0, self.pose_cb)
+        self.pose_timer = self.create_timer(1.0/25.0, self.pose_cb)
 
         # Initialize the models
         self.motion_model = MotionModel(self)
@@ -109,6 +109,18 @@ class ParticleFilter(Node):
         self.cmd_pub = self.create_publisher(AckermannDriveStamped, "/drive", 10)
 
         self.t1 = float(self.get_clock().now().nanoseconds)/1e9
+
+        # self.convergence_timer = None
+        # self.time_array = []
+        # self.outside_particles = []
+        self.convergence_timer = None
+
+        self.sensortimes = []
+        self.motiontimes = []
+        self.differences = []
+        self.time_array = []
+        self.positions = []
+        self.initial_positions = []
 
     def part_to_pose(self, particle):
         '''
@@ -140,6 +152,7 @@ class ParticleFilter(Node):
         '''
         with lock:
             if len(self.particles) > 0 and len(scan.ranges) > 0:
+                t1 = time.time()
                 ranges = scan.ranges
                 new_ranges = ranges[: : 11]
                 weights = self.sensor_model.evaluate(self.particles, new_ranges)
@@ -154,6 +167,7 @@ class ParticleFilter(Node):
                 indices = np.arange(self.num_particles)
                 indices = np.random.choice(indices, size=self.num_particles, p=weights)
                 self.particles = np.array([self.particles[i] for i in indices])
+                self.sensortimes.append(time.time()-t1)
 
     def odom_callback(self, odom_data):
         '''
@@ -164,6 +178,7 @@ class ParticleFilter(Node):
         if do:
             with lock:
                 if len(self.particles) > 0:
+                    t1 = time.time()
                     # Let the particles drift
                     x = odom_data.twist.twist.linear.x
                     y = odom_data.twist.twist.linear.y
@@ -175,7 +190,7 @@ class ParticleFilter(Node):
                     #     self.previous_pose = -np.array([x,y,theta])
                     # else:
 
-                    self.get_logger().info(str(theta))
+                    # self.get_logger().info(str(theta))
                     dv = -np.array([x,y,theta])# - self.previous_pose
                     #this might be the first thing we want to check
                     dt = time.time()-self.t1
@@ -187,6 +202,8 @@ class ParticleFilter(Node):
                     # Let the average drift
                     self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dx)
                     # self.previous_pose = np.array([x,y,theta])
+
+                    self.motiontimes.append(time.time()-t1)
 
                     self.t1 = float(self.get_clock().now().nanoseconds)/1e9
 
@@ -205,12 +222,11 @@ class ParticleFilter(Node):
             pose_data.pose.pose.orientation.w))
             theta = orientation[2]
 
-            # self.get_logger().info(f'Theta: {theta}')
+            self.initial_pose = np.array([x,y,theta])
+            self.initial_positions.append(self.initial_pose)
 
             self.weighted_avg = np.array([x, y, theta])
-
-            #self.get_logger().info(f'\n-----\nReal x: {x}\nReal y: {y}\nReal theta: {theta}\n-----')
-            # self.get_logger().info(str(pose_data.pose.pose))
+            self.convergence_timer = float(self.get_clock().now().nanoseconds)/1e9
 
             xs = x + np.random.default_rng().uniform(low=-1.0, high=1.0, size=self.num_particles)
             ys = y + np.random.default_rng().uniform(low=-1.0, high=1.0, size=self.num_particles)
@@ -221,6 +237,7 @@ class ParticleFilter(Node):
 
     def timer_cb(self):
         if len(self.particles) > 0:
+
             poses_msg = PoseArray()
             poses_msg.header.frame_id = "/map"
 
@@ -238,6 +255,23 @@ class ParticleFilter(Node):
             # self.cmd_pub.publish(drive_cmd)
 
     def pose_cb(self):
+        if len(self.particles) > 0:
+            dist_x = abs(self.particles[:,0]) - abs(self.initial_pose[0])
+            dist_y = abs(self.particles[:,1]) - abs(self.initial_pose[1])
+            # self.get_logger().info(f'{dist_x}')
+            below_x = np.sum(abs(dist_x)>0.2)
+            below_y = np.sum(abs(dist_y)>0.2)
+            # self.get_logger().info(f'{below_x},{below_y}')
+            t = float(self.get_clock().now().nanoseconds)/1e9 - self.convergence_timer
+            # self.time_array.append(t)
+            # self.outside_particles.append((below_x,below_y))
+            if below_x < 10 and below_y < 10:
+                # np.save('timehistory',self.time_array)
+                # np.save('particlenumber',self.outside_particles)
+                # self.get_logger().info(f'converged')
+                self.differences.append(self.weighted_avg - self.initial_pose)
+
+        self.positions.append(self.weighted_avg)
         avg_pose = self.part_to_odom(self.weighted_avg)
         self.odom_pub.publish(avg_pose)
 
@@ -265,6 +299,12 @@ def main(args=None):
     lock = threading.Lock()
 
     pf = ParticleFilter()
-
-    rclpy.spin(pf)
+    try:
+        rclpy.spin(pf)
+    except KeyboardInterrupt:
+        np.save('sensortimes',pf.sensortimes)
+        np.save('motiontimes',pf.motiontimes)
+        np.save('posedifference',pf.differences)
+        np.save('pose_history',pf.positions)
+        np.save('initials_history',pf.initial_positions)
     rclpy.shutdown()
