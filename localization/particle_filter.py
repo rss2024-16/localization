@@ -84,6 +84,10 @@ class ParticleFilter(Node):
         self.odom_pub = self.create_publisher(Odometry, "/pf/pose/odom", 1)
         self.br = tf2_ros.TransformBroadcaster(self)
 
+        ############## DEBUGGING ####################
+        self.cmd_pub = self.create_publisher(AckermannDriveStamped, "/drive", 10)
+        ############## DEBUGGING ####################
+
         self.poses_pub = self.create_publisher(PoseArray, "mcl", 1)
 
         self.viz_timer = self.create_timer(1, self.timer_cb)
@@ -104,9 +108,6 @@ class ParticleFilter(Node):
         #
         # Publish a transformation frame between the map
         # and the particle_filter_frame.
-
-        # Test
-        self.cmd_pub = self.create_publisher(AckermannDriveStamped, "/drive", 10)
 
         # Metrics
         self.tf_buffer = tf2_ros.Buffer()
@@ -144,6 +145,7 @@ class ParticleFilter(Node):
         Then resample the particles based on these probabilities
         '''
         with lock:
+            return
             if len(self.particles) > 0 and len(scan.ranges) > 0:
                 ranges = scan.ranges
                 # new_ranges = ranges[: : 11]
@@ -163,21 +165,20 @@ class ParticleFilter(Node):
         '''
         Whenever you get odometry data use the motion model to update the particle positions
         '''
-        with lock:
-            if len(self.particles) > 0:
-                # Let the particles drift
-                x = odom_data.twist.twist.linear.x
-                y = odom_data.twist.twist.linear.y
-                theta = odom_data.twist.twist.angular.z
+        #with lock:
+        if len(self.particles) > 0:
+            # Let the particles drift
+            x = odom_data.twist.twist.linear.x
+            y = odom_data.twist.twist.linear.y
+            theta = odom_data.twist.twist.angular.z
 
-                dt = self.get_clock().now().nanoseconds*1e-9 - self.prev_t
+            dx = np.array([x,y,theta])
 
-                dx = np.array([x,y,theta]) * dt
-                self.particles :np.array = self.motion_model.evaluate(self.particles, dx)
+            self.particles :np.array = self.motion_model.evaluate(self.particles, dx, self.prev_t)
 
-                # Let the average drift
-                self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dx)
-                self.prev_t = self.get_clock().now().nanoseconds*1e-9
+            # Let the average drift
+            self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dx)
+            self.prev_t = self.get_clock().now().nanoseconds
 
     def pose_callback(self, pose_data):
         '''
@@ -203,7 +204,8 @@ class ParticleFilter(Node):
             ys = y + np.random.default_rng().uniform(low=-1.0, high=1.0, size=self.num_particles)
 
             # Wrap the angles between -pi and +pi
-            thetas = np.angle(np.exp(1j * (theta + np.random.default_rng().uniform(low=0.0, high=2*np.pi, size=self.num_particles) ) ))
+            #thetas = np.angle(np.exp(1j * (theta + np.random.default_rng().uniform(low=0.0, high=2*np.pi, size=self.num_particles) ) ))
+            thetas = np.full(self.num_particles, theta)
             self.particles = np.array([np.array([x,y,theta]) for x,y,theta in zip(xs,ys,thetas)])
 
     def timer_cb(self):

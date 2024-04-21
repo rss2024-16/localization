@@ -8,6 +8,8 @@ class MotionModel:
                                              [0, 0, 1]
                                             ])
 
+        self.node = node
+
     def evaluate_noiseless(self, particle, odometry):
         # particle is 1x3
         # odometry is 3x1
@@ -18,7 +20,7 @@ class MotionModel:
         return np.array(future_particle)
 
 
-    def evaluate(self, particles: np.array, odometry):
+    def evaluate(self, particles: np.array, dx, prev_t):
         """
         Update the particles to reflect probable
         future states given the odometry data.
@@ -39,6 +41,15 @@ class MotionModel:
         particles_updated = []
 
         for particle in particles:
+
+            # particle is 1x3
+            # odometry is 3x1
+            # future_particle should be 3x1
+            dt = (self.node.get_clock().now().nanoseconds - prev_t) * 1e-9
+            odometry = dx * dt
+            future_particle = particle.T + self.transform(particle[-1]) @ odometry.T
+            future_particle = future_particle.T
+
             # Standard deviation for the random noise, in meters (?)
             std = 0.1
 
@@ -46,13 +57,7 @@ class MotionModel:
             y_eps = np.random.normal(scale=std)
             theta_eps = np.random.normal(scale=std)
 
-            # particle is 1x3
-            # odometry is 3x1
-            # future_particle should be 3x1
-            future_particle = particle.T + self.transform(particle[-1]) @ odometry.T
-            future_particle = future_particle.T
-
-            future_particle += np.array([x_eps, y_eps, theta_eps])
+            #future_particle += np.array([x_eps, y_eps, theta_eps])
 
             particles_updated.append(future_particle)
 
