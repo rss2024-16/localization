@@ -15,7 +15,7 @@ class MotionModel:
 
         self.n = node
 
-    def evaluate_noiseless(self, particle, odometry):
+    def evaluate_noiseless(self, particle, odometry, prev_time):
         """
         Update the particles to reflect probable 
         future states given the odometry data.
@@ -26,13 +26,15 @@ class MotionModel:
         # particle is 1x3
         # odometry is 3x1
         # future_particle should be 3x1
-        future_particle = particle.T + self.transform(particle[-1]) @ odometry.T
+        dt = float(self.n.get_clock().now().nanoseconds)/1e9 - prev_time
+        dx = odometry * dt
+        future_particle = particle.T + self.transform(particle[-1]) @ dx.T
         future_particle = future_particle.T
 
         return np.array(future_particle)
 
 
-    def evaluate(self, particles, odometry):
+    def evaluate(self, particles, odometry, prev_time):
         """
         Update the particles to reflect probable
         future states given the odometry data.
@@ -60,7 +62,9 @@ class MotionModel:
             # particle is 1x3
             # odometry is 3x1
             # future_particle should be 3x1
-            future_particle = particle.T + self.transform(particle[-1]) @ odometry.T
+            dt = float(self.n.get_clock().now().nanoseconds)/1e9 - prev_time
+            dx = odometry * dt
+            future_particle = particle.T + self.transform(particle[-1]) @ dx.T
             future_particle = future_particle.T
 
             # self.deterministic = True
