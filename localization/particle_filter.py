@@ -110,17 +110,8 @@ class ParticleFilter(Node):
 
         self.t1 = float(self.get_clock().now().nanoseconds)/1e9
 
-        # self.convergence_timer = None
-        # self.time_array = []
-        # self.outside_particles = []
-        self.convergence_timer = None
-
-        self.sensortimes = []
-        self.motiontimes = []
-        self.differences = []
-        self.time_array = []
-        self.positions = []
-        self.initial_positions = []
+        self.sensor_times = []
+        self.motion_times = []
 
     def part_to_pose(self, particle):
         '''
@@ -169,43 +160,37 @@ class ParticleFilter(Node):
                 self.particles = np.array([self.particles[i] for i in indices])
                 self.sensortimes.append(time.time()-t1)
 
+                self.sensor_times.append(time.time()-t1)
+
     def odom_callback(self, odom_data):
         '''
         Whenever you get odometry data use the motion model to update the particle positions
         '''
-        # self.get_logger().info('odom')
-        do = True
-        if do:
-            with lock:
-                if len(self.particles) > 0:
-                    t1 = time.time()
-                    # Let the particles drift
-                    x = odom_data.twist.twist.linear.x
-                    y = odom_data.twist.twist.linear.y
-                    # theta = 2*np.arccos(odom_data.pose.pose.orientation.w)
-                    # theta = np.arctan2(odom_data.twist.twist.linear.y,odom_data.twist.twist.linear.x)
-                    theta = odom_data.twist.twist.angular.z
+        with lock:
+            if len(self.particles) > 0:
+                # Let the particles drift
+                x = odom_data.twist.twist.linear.x
+                y = odom_data.twist.twist.linear.y
+                # theta = 2*np.arccos(odom_data.pose.pose.orientation.w)
+                # theta = np.arctan2(odom_data.twist.twist.linear.y,odom_data.twist.twist.linear.x)
+                theta = odom_data.twist.twist.angular.z
 
-                    # if self.previous_pose is None:
-                    #     self.previous_pose = -np.array([x,y,theta])
-                    # else:
+                # if self.previous_pose is None:
+                #     self.previous_pose = -np.array([x,y,theta])
+                # else:
 
-                    # self.get_logger().info(str(theta))
-                    dv = -np.array([x,y,theta])# - self.previous_pose
-                    #this might be the first thing we want to check
-                    dt = time.time()-self.t1
+                #self.get_logger().info(str(theta))
+                dv = -np.array([x,y,theta])# - self.previous_pose
 
-                    dx = dv*dt
-                    # self.get_logger().info(f'-----\nX: {dx[0]}\nY: {dx[1]}\nTheta: {dx[2]}\n-----\n')
-                    self.particles = self.motion_model.evaluate(self.particles, dx)
+                # self.get_logger().info(f'-----\nX: {dx[0]}\nY: {dx[1]}\nTheta: {dx[2]}\n-----\n')
+                self.particles = self.motion_model.evaluate(self.particles, dv, self.t1)
 
-                    # Let the average drift
-                    self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dx)
-                    # self.previous_pose = np.array([x,y,theta])
+                # Let the average drift
+                self.weighted_avg = self.motion_model.evaluate_noiseless(self.weighted_avg, dv, self.t1)
 
-                    self.motiontimes.append(time.time()-t1)
+                self.t1 = float(self.get_clock().now().nanoseconds)/1e9
 
-                    self.t1 = float(self.get_clock().now().nanoseconds)/1e9
+                self.motion_times.append(time.time() - t1)
 
     def pose_callback(self, pose_data):
         '''
@@ -236,6 +221,9 @@ class ParticleFilter(Node):
             self.particles = np.array([np.array([x,y,theta]) for x,y,theta in zip(xs,ys,thetas)])
 
     def timer_cb(self):
+        """
+        publish the particles to the /mcl topic
+        """
         if len(self.particles) > 0:
 
             poses_msg = PoseArray()
@@ -249,29 +237,16 @@ class ParticleFilter(Node):
             # if self.poses_pub.get_num_connections() > 0:
             self.poses_pub.publish(poses_msg)
 
-            # drive_cmd = AckermannDriveStamped()
-            # drive_cmd.drive.speed = -0.5
-            # drive_cmd.drive.steering_angle = 0.0
-            # self.cmd_pub.publish(drive_cmd)
+            # Test
+            drive_cmd = AckermannDriveStamped()
+            drive_cmd.drive.speed = -0.5
+            drive_cmd.drive.steering_angle = 0.0
+            self.cmd_pub.publish(drive_cmd)
 
     def pose_cb(self):
-        if len(self.particles) > 0:
-            dist_x = abs(self.particles[:,0]) - abs(self.initial_pose[0])
-            dist_y = abs(self.particles[:,1]) - abs(self.initial_pose[1])
-            # self.get_logger().info(f'{dist_x}')
-            below_x = np.sum(abs(dist_x)>0.2)
-            below_y = np.sum(abs(dist_y)>0.2)
-            # self.get_logger().info(f'{below_x},{below_y}')
-            t = float(self.get_clock().now().nanoseconds)/1e9 - self.convergence_timer
-            # self.time_array.append(t)
-            # self.outside_particles.append((below_x,below_y))
-            if below_x < 10 and below_y < 10:
-                # np.save('timehistory',self.time_array)
-                # np.save('particlenumber',self.outside_particles)
-                # self.get_logger().info(f'converged')
-                self.differences.append(self.weighted_avg - self.initial_pose)
-
-        self.positions.append(self.weighted_avg)
+        """
+        Publish the average pose to the odom topic
+        """
         avg_pose = self.part_to_odom(self.weighted_avg)
         self.odom_pub.publish(avg_pose)
 
@@ -279,7 +254,7 @@ class ParticleFilter(Node):
         obj = TransformStamped()
         obj.header.stamp = self.get_clock().now().to_msg()
         obj.header.frame_id = "/map"
-        obj.child_frame_id = "/base_link"
+        obj.child_frame_id = "/base_link" #self.particle_filter_frame
         obj.transform.translation.x = self.weighted_avg[0]
         obj.transform.translation.y = self.weighted_avg[1]
         obj.transform.translation.z = 0.0
@@ -302,9 +277,6 @@ def main(args=None):
     try:
         rclpy.spin(pf)
     except KeyboardInterrupt:
-        np.save('sensortimes',pf.sensortimes)
-        np.save('motiontimes',pf.motiontimes)
-        np.save('posedifference',pf.differences)
-        np.save('pose_history',pf.positions)
-        np.save('initials_history',pf.initial_positions)
+        np.save('sensortimes',pf.sensor_times)
+        np.save('motiontimes',pf.motion_times)
     rclpy.shutdown()

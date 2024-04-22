@@ -35,7 +35,7 @@ class SensorModel:
         ####################################
         # Adjust these parameters
         self.alpha_hit = 0.71
-        self.alpha_short = 0.1
+        self.alpha_short = 0.10
         self.alpha_max = 0.07
         self.alpha_rand = 0.12
         self.sigma_hit = 8
@@ -69,6 +69,7 @@ class SensorModel:
             self.map_topic,
             self.map_callback,
             1)
+        
 
     def precompute_sensor_model(self):
         """
@@ -123,7 +124,7 @@ class SensorModel:
             #columns represent a singular d value i.e. column 0 : d=0 column 1: d=1 etc
             self.sensor_model_table[:,col] = self.sensor_model_table[:,col] / sum(self.sensor_model_table[:,col])
 
-        save = False
+        save = True
         if save:
             np.save('precomputed_table',self.sensor_model_table)
             np.save('phits',phits)
@@ -159,7 +160,7 @@ class SensorModel:
         """
 
         if not self.map_set:
-            self.n.get_logger().info('SET THE MAP DUMBASS')
+            self.n.get_logger().info('SET THE MAP')
             return
 
         particles = np.array(particles) 
@@ -172,14 +173,15 @@ class SensorModel:
         zmax = (self.table_width-1)*step
         scans = np.clip(scans,0,zmax)
         observation = np.clip(observation,0,zmax)
-        
+
         weights = []
         zk_index = np.floor(observation/step).astype(int)
         for particle_scan in scans:
-            # weight = 1
+            weight = 1
             d_index = np.floor(particle_scan/step).astype(int)
             # for zk, d in zip(zk_index,d_index):
             #     weight *= self.sensor_model_table[int(zk)][int(d)]
+            # weights.append(weight)
             weight = np.prod(self.sensor_model_table[zk_index,d_index])
             weights.append(weight)
 
