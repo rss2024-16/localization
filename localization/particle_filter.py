@@ -65,11 +65,6 @@ class ParticleFilter(Node):
 
         self.particles_pub = self.create_publisher(PoseArray, "/debug", 1)
 
-        # Fixed odom publishing
-        odom_rate = 25.0 # Hz
-        self.pose_timer = self.create_timer(1.0/odom_rate, self.estimate_odom)
-
-        self.previous_pose = None
         self.prev_time = self.T0 = self.prev_log_time = self.get_clock().now()
 
         self.get_logger().info("=============+READY+=============")
@@ -85,7 +80,10 @@ class ParticleFilter(Node):
 
         now = self.get_clock().now()
 
-        x_avg, y_avg, theta_avg = self.previous_pose
+        # Average the pose
+        x_avg, y_avg = np.mean(self.particles[:, :2], axis=0)
+        theta_avg = np.arctan2(np.mean(np.sin(self.particles[:, -1])), np.mean(np.cos(self.particles[:, -1])))
+        self.previous_pose = (x_avg, y_avg, theta_avg)
 
         # Create the message
         msg = Odometry()
@@ -132,10 +130,8 @@ class ParticleFilter(Node):
         idxs = np.random.choice(int(self.num_particles), int(self.num_particles), p=self.weights)
         self.particles = self.particles[idxs]
 
-        # Average the pose
-        x_avg, y_avg = np.mean(self.particles[:, :2], axis=0)
-        theta_avg = np.arctan2(np.mean(np.sin(self.particles[:, -1])), np.mean(np.cos(self.particles[:, -1])))
-        self.previous_pose = (x_avg, y_avg, theta_avg)
+        # Publish updated pose
+        self.estimate_odom()
 
         self.prev_time = now
         self.lock.release()
@@ -160,10 +156,8 @@ class ParticleFilter(Node):
         # Let the particles drift
         self.particles = self.motion_model.evaluate(self.particles, delta_x, v)
 
-        # Average the pose
-        x_avg, y_avg = np.mean(self.particles[:, :2], axis=0)
-        theta_avg = np.arctan2(np.mean(np.sin(self.particles[:, -1])), np.mean(np.cos(self.particles[:, -1])))
-        self.previous_pose = (x_avg, y_avg, theta_avg)
+        # Publish updated pose
+        self.estimate_odom()
 
         self.prev_time = now
         self.lock.release()
@@ -198,11 +192,9 @@ class ParticleFilter(Node):
         # Organize the samples
         self.particles = np.hstack((x_samples, y_samples, theta_samples))
 
-        # Average the pose
-        x_avg, y_avg = np.mean(self.particles[:, :2], axis=0)
-        theta_avg = np.arctan2(np.mean(np.sin(self.particles[:, -1])), np.mean(np.cos(self.particles[:, -1])))
-        self.previous_pose = (x_avg, y_avg, theta_avg)
-
+        # Publish updated pose
+        self.estimate_odom()
+        
         self.initialized = True
         self.lock.release()
 
