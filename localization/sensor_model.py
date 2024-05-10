@@ -23,7 +23,6 @@ class SensorModel:
 
         self.map_topic = node.get_parameter('map_topic').get_parameter_value().string_value
         self.num_beams_per_particle = node.get_parameter('num_beams_per_particle').get_parameter_value().integer_value
-        # node.get_logger().info(f' beams: {self.num_beams_per_particle}')
         self.scan_theta_discretization = node.get_parameter(
             'scan_theta_discretization').get_parameter_value().double_value
         self.scan_field_of_view = node.get_parameter('scan_field_of_view').get_parameter_value().double_value
@@ -34,14 +33,15 @@ class SensorModel:
 
         ####################################
         # Adjust these parameters
-        self.alpha_hit = 0.71
-        self.alpha_short = 0.10
-        self.alpha_max = 0.07
-        self.alpha_rand = 0.12
-        self.sigma_hit = 8
+        self.alpha_hit = .74
+        self.alpha_short = .07
+        self.alpha_max = .07
+        self.alpha_rand = .12
+        self.sigma_hit = 8.0
 
         # Your sensor table will be a `table_width` x `table_width` np array:
         self.table_width = 201
+        self.z_max = 200.0
         ####################################
 
         node.get_logger().info("%s" % self.map_topic)
@@ -69,8 +69,26 @@ class SensorModel:
             self.map_topic,
             self.map_callback,
             1)
-        
 
+        node.get_logger().info("Sensor model initialized")
+
+    def pmax(self, z_k):
+        return 1 if z_k == self.z_max else 0
+
+    def phit(self, z_k, d):
+        return (1 / np.sqrt(2 * np.pi * self.sigma_hit * self.sigma_hit)) * np.exp(
+            -(np.square(z_k - d)) / (2 * self.sigma_hit ** 2)) if 0 <= z_k and z_k <= self.z_max else 0
+
+    def pshort(self, z_k, d):
+        return 2 * (1 - z_k / d) / d if 0 <= z_k and z_k <= d and d != 0 else 0
+
+    def prand(self, z_k):
+        return 1 / self.z_max if 0 <= z_k and z_k <= self.z_max else 0
+
+    def pdf_without_phit(self, z_k, d):
+        return (self.alpha_max * self.pmax(z_k) + self.alpha_rand * self.prand(z_k) + self.alpha_short * self.pshort(
+            z_k, d))
+        
     def precompute_sensor_model(self):
         """
         Generate and store a table which represents the sensor model.
@@ -90,47 +108,25 @@ class SensorModel:
         returns:
             No return type. Directly modify `self.sensor_model_table`.
         """
-        zmax = self.table_width-1
+        for z_k in range(0, 201):
+            for d in range(0, 201):
+                self.sensor_model_table[z_k, d] = (1 / np.sqrt(2 * np.pi * self.sigma_hit * self.sigma_hit)) * np.exp(
+            -(np.square(z_k - d)) / (2 * self.sigma_hit ** 2)) if 0 <= z_k and z_k <= self.z_max else 0
 
-        phits = np.empty((self.table_width, self.table_width))
-        pothers = np.empty((self.table_width, self.table_width))
+        nu = np.sum(self.sensor_model_table, axis=0)
+        self.sensor_model_table /= nu
 
-        #iterating left to right across columns
-        for d in range(self.table_width): #cols
-            for zk in range(self.table_width): #rows
+        for z_k in range(0, 201):
+            for d in range(0, 201):
+                self.sensor_model_table[z_k, d] = self.alpha_hit * self.sensor_model_table[
+                    z_k, d] + self.alpha_short * self.pshort(z_k, d) + self.alpha_max * self.pmax(
+                    z_k) + self.alpha_rand * self.prand(
+                    z_k)
 
-                phit = 1/zmax * ( 1/np.sqrt(2*np.pi*self.sigma_hit**2) * np.exp(-(zk-d)**2/(2*self.sigma_hit**2)))
+        thesum = np.sum(self.sensor_model_table, axis=0)
+        self.n.get_logger().info(f"value {self.sensor_model_table[:, 0].sum()}")
 
-                pshort = 2/d * (1-zk/d) if zk <= d and d!= 0 else 0
-                pmax = 1 if zk == (zmax) else 0
-                prand = 1/zmax
-
-                phits[zk][d] = phit
-                pothers[zk][d] = self.alpha_short*pshort + self.alpha_rand*prand + self.alpha_max*pmax
-
-
-        for col in range(phits.shape[1]):
-            #normalize phits across d values
-            phits[:,col] = phits[:,col] / sum(phits[:,col])
-
-        for d in range(self.table_width):
-            for zk in range(self.table_width):
-                #calculate total probabilities and create table
-                ptotal = self.alpha_hit*phits[zk][d] + pothers[zk][d]
-                self.sensor_model_table[zk][d] = ptotal
-
-        for col in range(self.sensor_model_table.shape[1]):
-            #normalize columns to sum probabilities to 1
-            #columns represent a singular d value i.e. column 0 : d=0 column 1: d=1 etc
-            self.sensor_model_table[:,col] = self.sensor_model_table[:,col] / sum(self.sensor_model_table[:,col])
-
-        save = True
-        if save:
-            np.save('precomputed_table',self.sensor_model_table)
-            np.save('phits',phits)
-            np.save('pothers',pothers)
-
-
+        self.sensor_model_table /= np.sum(self.sensor_model_table, axis=0)
 
     def evaluate(self, particles, observation):
         """
@@ -158,40 +154,44 @@ class SensorModel:
             - comparing your laser scan with the scan at each pose to determine
             likelihood that you are at that pose
         """
-
         if not self.map_set:
-            self.n.get_logger().info('SET THE MAP')
+            self.n.get_logger().info("Sensor model does not have a map")
             return
 
-        particles = np.array(particles) 
-        scans = self.scan_sim.scan(particles) # d
+        # scans: d (depending on i) for each particle. [N x num_beams]
+        # Calculate likelihood P(zk | xk, "i") (how likely is zk if we scan from angle i and position xk).
 
-        #convert from meters to pixels
-        step = self.resolution*self.lidar_scale_to_map_scale
+        # zk: the actual scan from the lidar 
+        # xk: the potential positions (particles)
+        # d_i: the ground truth for this angle i. 
 
-        #clip to be within 0 to zmax
-        zmax = (self.table_width-1)*step
-        scans = np.clip(scans,0,zmax)
-        observation = np.clip(observation,0,zmax)
+        scans = self.scan_sim.scan(np.array(particles))
+        N, m = scans.shape
 
-        weights = []
-        zk_index = np.floor(observation/step).astype(int)
-        for particle_scan in scans:
-            weight = 1
-            d_index = np.floor(particle_scan/step).astype(int)
-            # for zk, d in zip(zk_index,d_index):
-            #     weight *= self.sensor_model_table[int(zk)][int(d)]
-            # weights.append(weight)
-            weight = np.prod(self.sensor_model_table[zk_index,d_index])
-            weights.append(weight)
+        # Conversion from meters to pixels
+        conversion = self.resolution * self.lidar_scale_to_map_scale
 
-        weights = np.power(np.array(weights), 1/3) #1/2.2 is good according to TA
-        eta = np.sum(weights)
-        probabilities = weights / eta
+        # Downsample lidar observations, convert, clip
+        lidar_stride = 11
+        observation = np.array(observation[::lidar_stride]) / conversion # 1 x num_beams
+        observation = np.repeat(observation[np.newaxis, :], N, axis=0)  # N x num_beams
+        observation = np.rint(np.clip(observation, 0, self.z_max)).astype(int)
 
-        return probabilities
+        # Convert and clip scans
+        scans = np.rint(np.clip(scans / conversion, 0, self.z_max)).astype(int)
+
+        # Lookup probabilities
+        probs = self.sensor_model_table[observation, scans]
+
+        # I dont know what this does
+        probs = np.exp(np.sum(np.log(probs), axis=1))
+
+        # Squash probabilities and return
+        return np.array(np.power(probs, 1 / 2.2))
 
     def map_callback(self, map_msg):
+        self.n.get_logger().info("Map aquired in sensor model")
+
         # Convert the map to a numpy array
         self.map = np.array(map_msg.data, np.double) / 100.
         self.map = np.clip(self.map, 0, 1)

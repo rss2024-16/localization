@@ -3,38 +3,13 @@ import numpy as np
 class MotionModel:
 
     def __init__(self, node):
-        """
-        idk what node is 
-        """
-        self.deterministic = False
+        self.trans_std = .01 * 2
+        self.rot_std = np.pi / 30 * 2
+        self.k_vx = .02
+        self.k_vy = .005
+        self.k_vtheta = np.pi / 60
 
-        self.transform = lambda theta: np.array([ [np.cos(theta), -np.sin(theta), 0],
-                                             [np.sin(theta), np.cos(theta), 0],
-                                             [0, 0, 1]
-                                            ])
-
-        self.n = node
-
-    def evaluate_noiseless(self, particle, odometry, prev_time):
-        """
-        Update the particles to reflect probable 
-        future states given the odometry data.
-
-        Unlike evaluate, does not incorporate any noise, 
-        can be interpreted as ground truth odometry.
-        """
-        # particle is 1x3
-        # odometry is 3x1
-        # future_particle should be 3x1
-        dt = float(self.n.get_clock().now().nanoseconds)/1e9 - prev_time
-        dx = odometry * dt
-        future_particle = particle.T + self.transform(particle[-1]) @ dx.T
-        future_particle = future_particle.T
-
-        return np.array(future_particle)
-
-
-    def evaluate(self, particles, odometry, prev_time):
+    def evaluate(self, particles, odometry, velocity):
         """
         Update the particles to reflect probable
         future states given the odometry data.
@@ -47,38 +22,34 @@ class MotionModel:
                 [    ...     ]
 
             odometry: A 3-vector [dx dy dtheta]
+            
+            velocity: A 3-vector [vx vy vtheta]
 
         returns:
             particles: An updated matrix of the
                 same size
         """
-        particles_updated = []
+        n_particles = particles.shape[0]
+        dx, dy, dtheta = odometry
+        vx, vy, vtheta = velocity
 
-        for particle in particles:
+        # Generate noise for all particles at once
+        x_noise = (self.trans_std + self.k_vx * vx) * np.random.randn(n_particles)
+        y_noise = (self.trans_std + self.k_vy * vy) * np.random.randn(n_particles)
+        theta_noise = (self.rot_std + self.k_vtheta * vtheta) * np.random.randn(n_particles)
 
+        # Update particle orientations
+        new_thetas = particles[:, 2] + dtheta + theta_noise
+        cos_theta = np.cos(new_thetas)
+        sin_theta = np.sin(new_thetas)
 
-            # Standard deviation for the random noise, in meters (?)
+        # Compute the transformation for dx, dy considering the new orientation
+        dx_prime = cos_theta * dx - sin_theta * dy + x_noise
+        dy_prime = sin_theta * dx + cos_theta * dy + y_noise
 
-            # particle is 1x3
-            # odometry is 3x1
-            # future_particle should be 3x1
-            dt = float(self.n.get_clock().now().nanoseconds)/1e9 - prev_time
-            dx = odometry * dt
-            future_particle = particle.T + self.transform(particle[-1]) @ dx.T
-            future_particle = future_particle.T
+        # Update particle positions
+        particles[:, 0] += dx_prime
+        particles[:, 1] += dy_prime
+        particles[:, 2] = new_thetas  # Update thetas
 
-            # self.deterministic = True
-            if not self.deterministic:
-                # Standard deviation for the random noise, in meters (?)
-                linear_noise = .05
-                angular_noise = .05
-
-                x_eps = np.random.normal(scale=linear_noise)
-                y_eps = np.random.normal(scale=linear_noise)
-                theta_eps = np.random.normal(scale=angular_noise)
-
-                future_particle += np.array([x_eps, y_eps, theta_eps])
-
-            particles_updated.append(future_particle)
-
-        return np.array(particles_updated)
+        return particles
