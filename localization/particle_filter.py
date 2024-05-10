@@ -32,11 +32,15 @@ class ParticleFilter(Node):
         self.declare_parameter('odom_topic', "/odom")
         self.declare_parameter('scan_topic', "/scan")
         scan_topic = self.get_parameter("scan_topic").get_parameter_value().string_value
-        odom_topic = self.get_parameter("odom_topic").get_parameter_value().string_value   
+        odom_topic = self.get_parameter("odom_topic").get_parameter_value().string_value
 
         self.get_logger().info("Localization %s" % odom_topic)
         self.get_logger().info("Localization %s" % scan_topic)   
         self.get_logger().info(f"Localization num particles {self.num_particles}")  
+
+        self.declare_parameter('debug', "No")
+        debug_msg = self.get_parameter("debug").get_parameter_value().string_value.lower()
+        self.debug = False if debug_msg == "no" else True
 
         # Class variables
         self.weights = np.ones(int(self.num_particles)) / self.num_particles  # start with uniform weight for each particle
@@ -67,6 +71,8 @@ class ParticleFilter(Node):
 
         self.prev_time = self.T0 = self.prev_log_time = self.get_clock().now()
 
+        if self.debug:
+            self.get_logger().info("LOCALIZATION IN DEBUG, PUBLISHING PARTICLES")
         self.get_logger().info("=============+READY+=============")
 
     def estimate_odom(self):
@@ -96,20 +102,19 @@ class ParticleFilter(Node):
         msg.header.stamp = now.to_msg()
         self.odom_pub.publish(msg)
 
-        # Debug code, comment this out if running on bot
-        array = PoseArray()
-        array.header.frame_id = '/map'
-        array.poses = []
-        for particle in self.particles:
-            part_pose = Pose()
-            part_pose.position.x, part_pose.position.y = particle[:2]
-            part_pose.orientation.x, part_pose.orientation.y, part_pose.orientation.z, part_pose.orientation.w = quaternion_from_euler(
-                0, 0, particle[2])
-            array.poses.append(part_pose)
+        # Debug particle pose array
+        if self.debug:
+            array = PoseArray()
+            array.header.frame_id = '/map'
+            array.poses = []
+            for particle in self.particles:
+                part_pose = Pose()
+                part_pose.position.x, part_pose.position.y = particle[:2]
+                part_pose.orientation.x, part_pose.orientation.y, part_pose.orientation.z, part_pose.orientation.w = quaternion_from_euler(
+                    0, 0, particle[2])
+                array.poses.append(part_pose)
 
-        self.particles_pub.publish(array)
-
-        return msg
+            self.particles_pub.publish(array)
 
     def laser_callback(self, scan):
         """
@@ -194,7 +199,7 @@ class ParticleFilter(Node):
 
         # Publish updated pose
         self.estimate_odom()
-        
+
         self.initialized = True
         self.lock.release()
 

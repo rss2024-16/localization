@@ -22,6 +22,9 @@ particle_filter:
     scan_topic: "/scan"
     odom_topic: "/vesc/odom"
 
+    # Whether or not to publish the particle pose array
+    debug: "Yes"
+
     # The frame you should publish your transform to
     particle_filter_frame: "/base_link"
 
