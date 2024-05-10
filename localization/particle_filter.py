@@ -94,10 +94,10 @@ class ParticleFilter(Node):
         # Create the message
         msg = Odometry()
         msg.pose.pose.position.x, msg.pose.pose.position.y = x_avg, y_avg
-        msg.pose.pose.orientation.x = np.cos(theta_avg / 2)
+        msg.pose.pose.orientation.x = 0.0
         msg.pose.pose.orientation.y = 0.0
-        msg.pose.pose.orientation.z = 0.0
-        msg.pose.pose.orientation.w = np.sin(theta_avg / 2)
+        msg.pose.pose.orientation.z = np.sin(theta_avg / 2)
+        msg.pose.pose.orientation.w = np.cos(theta_avg / 2)
         msg.header.frame_id = '/map'
         msg.header.stamp = now.to_msg()
         self.odom_pub.publish(msg)
@@ -154,7 +154,7 @@ class ParticleFilter(Node):
         dt = (now - self.prev_time).nanoseconds / 1e9
 
         # Calculate our change in pose
-        v = [odom.twist.twist.linear.x, odom.twist.twist.linear.y, odom.twist.twist.angular.z]
+        v = [-odom.twist.twist.linear.x, -odom.twist.twist.linear.y, odom.twist.twist.angular.z]
         dx, dy, dtheta = v[0] * dt, v[1] * dt, v[2] * dt
         delta_x = [dx, dy, dtheta]
 

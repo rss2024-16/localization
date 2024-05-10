@@ -3,11 +3,10 @@ import numpy as np
 class MotionModel:
 
     def __init__(self, node):
-        self.trans_std = .01 * 2
+        self.trans_std = .05 * 2
         self.rot_std = np.pi / 30 * 2
-        self.k_vx = .02
-        self.k_vy = .005
-        self.k_vtheta = np.pi / 60
+        self.k_vx = .025
+        self.k_vtheta = np.pi / 120
 
     def evaluate_noiseless(self, pose, odometry):
         """
@@ -65,7 +64,7 @@ class MotionModel:
 
         # Generate noise for all particles at once
         x_noise = (self.trans_std + self.k_vx * vx) * np.random.randn(n_particles)
-        y_noise = (self.trans_std + self.k_vy * vy) * np.random.randn(n_particles)
+        y_noise = (self.trans_std) * np.random.randn(n_particles)
         theta_noise = (self.rot_std + self.k_vtheta * vtheta) * np.random.randn(n_particles)
 
         # Transformation matrix calculations
